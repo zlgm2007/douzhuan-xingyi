@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+._*
+
+# 本地验证帧 / 临时产物
+/tmp/
+*.png.tmp
+
+# 依赖（本项目零 npm 依赖，留作兜底）
+node_modules/
