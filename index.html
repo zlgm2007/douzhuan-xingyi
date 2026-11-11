@@ -179,6 +179,9 @@
     opacity:0;pointer-events:none;transition:opacity .28s var(--ease),transform .28s var(--ease);
     transform:scale(.96)}
   #card.on{opacity:1;pointer-events:auto;transform:scale(1)}
+  #card::-webkit-scrollbar{width:5px}
+  #card::-webkit-scrollbar-thumb{background:rgba(235,231,223,.24);border-radius:3px}
+  #card::-webkit-scrollbar-track{background:transparent}
   #card .ch{display:flex;align-items:baseline;gap:8px;min-width:0}
   #card .ch i{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:1px}
   #card .ch b{font-size:15px;font-weight:400;letter-spacing:.12em;color:var(--paper);
