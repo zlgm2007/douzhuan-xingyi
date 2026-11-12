@@ -159,6 +159,19 @@
   #sunHud .note{margin-top:13px;font-size:10.5px;line-height:1.78;color:rgba(235,231,223,.55);max-width:340px}
   #sunHud .src{margin-top:10px;font-family:"JetBrains Mono",monospace;font-size:8px;letter-spacing:.14em;
     color:rgba(235,231,223,.30)}
+  /* 讲解按钮：跟「返回星野」同一个 pill 家族，放右下角让讲解不打断读字 */
+  #sunHud .say{position:absolute;right:clamp(16px,3vw,42px);bottom:clamp(26px,5vh,60px);pointer-events:auto;
+    display:inline-flex;align-items:center;gap:9px;padding:9px 18px;border:1px solid rgba(235,231,223,.20);
+    border-radius:999px;background:rgba(3,5,11,.42);backdrop-filter:blur(6px);cursor:pointer;
+    font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.16em;color:var(--dim);
+    transition:.25s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+    user-select:none;-webkit-user-select:none}
+  #sunHud .say:hover{color:var(--paper);border-color:rgba(235,231,223,.5);background:rgba(235,231,223,.06)}
+  #sunHud .say i{font-style:normal;font-size:13px;line-height:1;color:rgba(255,206,150,.75)}
+  #sunHud .say.playing{color:rgba(255,238,214,.95);border-color:rgba(255,206,150,.55);
+    background:rgba(255,206,150,.10)}
+  #sunHud .say.playing i{color:rgba(255,206,150,.95);animation:sayPulse 1.6s ease-in-out infinite}
+  @keyframes sayPulse{0%,100%{opacity:.55}50%{opacity:1}}
 
   /* 面板 Tab：太阳系 / 黄道十二星座 */
   #panel .tabs{display:flex;gap:4px;margin:0 6px 9px;padding-bottom:9px;border-bottom:1px solid rgba(235,231,223,.10)}
@@ -330,6 +343,7 @@
     #sunHud .stats{margin-top:9px;gap:3px 14px;font-size:8.5px}
     #sunHud .note{margin-top:9px;font-size:9.5px;line-height:1.65;max-width:none}
     #sunHud .src{font-size:7px;letter-spacing:.1em}
+    #sunHud .say{right:12px;top:12px;bottom:auto;padding:6px 13px;font-size:9px}
   }
 </style>
 </head>
@@ -414,6 +428,7 @@
 <div id="sunFlash"></div>
 <div id="sunHud">
   <div class="back" id="sunBack"><i>‹</i>返回星野</div>
+  <div class="say" id="shSay"><i>♪</i><span>讲解</span></div>
   <div class="meta">
     <div class="kick" id="shKick">SOL · G2V · 46 亿年</div>
     <h2 id="shTitle">太阳</h2>
@@ -1241,55 +1256,65 @@ viewScene.add(sunCorona);
  * dist 是以"行星半径 = 1"为单位的相机距离，只影响构图（球都按半径 1 建模）。
  */
 const PLANET_VIEWS = {
-  sun: { proc: true, kick:'SOL · G2V · 46 亿年', title:'太阳', en:'THE SUN', dist:2.55, fov:50,
+  sun: { proc: true,
+    say:'太阳是太阳系唯一的恒星，直径约 140 万公里，装得下 130 万个地球。核心温度约 1500 万度，氢在这里聚变成氦，光要 8 分 20 秒才能到地球。它已经燃烧了 46 亿年，还有大约 50 亿年的壮年。', audio:'assets/audio/sun.wav', kick:'SOL · G2V · 46 亿年', title:'太阳', en:'THE SUN', dist:2.55, fov:50,
     stats:[['直径','1,392,700 km · 109 个地球'],['质量','占太阳系 99.86%'],['表面温度','约 5,500 ℃'],
            ['核心温度','约 1,500 万 ℃'],['距地','1.496 亿 km · 光走 8 分 20 秒']],
     note:'每秒约 6 亿吨氢聚变成氦，质量以光和热的形式向外辐射。你看到的这层「火」，是 5,500 ℃ 的等离子体在对流翻滚。' },
 
   moon: { map:'assets/planets/moon.jpg', tint:[1.0,0.99,0.96], atm:[0,0,0], atmK:0, obl:6.7, rot:655.7, rot0:-Math.PI/2, dist:2.75,
-    kick:'MOON · 地球唯一天然卫星', title:'月亮', en:'THE MOON',
+    kick:'MOON · 地球唯一天然卫星',
+    say:'月球是地球唯一的天然卫星，直径 3475 公里，大约是地球的四分之一。它几乎没有大气，昼夜温差从零上 120 度到零下 170 度。潮汐锁定让它永远只把同一面朝向地球。', audio:'assets/audio/moon.wav',
+    title:'月亮', en:'THE MOON',
     stats:[['直径','3,475 km · 地球的 0.27 倍'],['距地','384,400 km · 光走 1.28 秒'],
            ['自转','27.32 天（与公转同步）'],['温差','-173 ℃ ~ 127 ℃'],['大气','几乎没有']],
     note:'同一面永远朝向地球——自转与公转严格同步（潮汐锁定），所以站在地面永远看不到它的背面。那些暗色"海"是古老的玄武岩熔岩平原。' },
 
   mercury: { map:'assets/planets/mercury.jpg', tint:[1.0,0.98,0.95], atm:[0,0,0], atmK:0, obl:0.03, rot:1407.6, dist:2.75,
-    kick:'MERCURY · 0.39 AU', title:'水星', en:'MERCURY',
+    kick:'MERCURY · 0.39 AU',
+    say:'水星是离太阳最近的行星，也是八大行星里最小的一颗，直径 4880 公里。它几乎没有大气，白天能烤到 430 度，夜里掉到零下 180 度。它的一年只有 88 天，一天却长达 59 个地球日。', audio:'assets/audio/mercury.wav', title:'水星', en:'MERCURY',
     stats:[['直径','4,879 km · 地球的 0.38 倍'],['距日','5,790 万 km'],['自转','58.6 天'],
            ['温差','-173 ℃ ~ 427 ℃'],['卫星','0 颗']],
     note:'它的一天比一年还长：太阳日约 176 个地球日，公转一圈只要 88 天。几乎没有大气保温，昼夜落差超过 600 ℃。' },
 
   venus: { map:'assets/planets/venus_atmosphere.jpg', tint:[1.02,0.95,0.82], atm:[1.0,0.86,0.52], atmK:0.28, obl:177.4, rot:-5832.5, dist:2.8,
-    kick:'VENUS · 0.72 AU', title:'金星', en:'VENUS',
+    kick:'VENUS · 0.72 AU',
+    say:'金星和地球大小相近，直径 12000 公里，却被厚厚的二氧化碳云层包住。地表气压是地球的 90 倍，温度约 460 度，比水星还热。它自转极慢，一个金星日比一个金星年还要长。', audio:'assets/audio/venus.wav', title:'金星', en:'VENUS',
     stats:[['直径','12,104 km · 地球的 0.95 倍'],['距日','1.082 亿 km'],['自转','243 天（逆行）'],
            ['表面温度','约 464 ℃'],['气压','92 bar · 96.5% 二氧化碳']],
     note:'你看到的不是地面，是终年不散的浓硫酸云顶。失控温室效应把地表烤到 464 ℃，比更靠近太阳的水星还热。它自转方向与公转相反。' },
 
   mars: { map:'assets/planets/mars.jpg', tint:[1.02,0.94,0.88], atm:[0.9,0.52,0.30], atmK:0.10, obl:25.2, rot:24.6, dist:2.75,
-    kick:'MARS · 1.52 AU', title:'火星', en:'MARS',
+    kick:'MARS · 1.52 AU',
+    say:'火星直径 6779 公里，大约是地球的一半。它有一层稀薄的二氧化碳大气，平均温度零下 60 度。奥林匹斯山高约 22 公里，是太阳系最高的火山；水手谷长 4000 公里，像一道巨大的伤疤。', audio:'assets/audio/mars.wav', title:'火星', en:'MARS',
     stats:[['直径','6,792 km · 地球的 0.53 倍'],['距日','2.28 亿 km'],['自转','24.6 小时'],
            ['温度','-125 ℃ ~ 20 ℃'],['卫星','2 颗']],
     note:'红色来自土壤里的氧化铁。太阳系最高的火山奥林匹斯山在这里，高 21.9 km，是珠峰的 2.4 倍；大气密度只有地球的 0.6%。' },
 
   jupiter: { map:'assets/planets/jupiter.jpg', tint:[1.04,1.0,0.96], atm:[0.88,0.74,0.52], atmK:0.12, obl:3.1, rot:9.9, dist:3.0,
-    kick:'JUPITER · 5.2 AU', title:'木星', en:'JUPITER',
+    kick:'JUPITER · 5.2 AU',
+    say:'木星是太阳系最大的行星，直径 143000 公里，相当于 11 个地球并排。它主要由氢和氦组成，没有可以站立的地面。大红斑是一场刮了几百年的风暴，比整个地球还要宽。', audio:'assets/audio/jupiter.wav', title:'木星', en:'JUPITER',
     stats:[['直径','142,984 km · 地球的 11.2 倍'],['距日','7.785 亿 km'],['自转','9.9 小时（最快）'],
            ['云顶温度','约 -110 ℃'],['卫星','95 颗']],
     note:'没有固体表面——你看到的是氨冰与硫氢化铵的云顶，条纹是不同纬度的高速气流。大红斑是一场至少刮了 190 年的反气旋，宽度能塞下 2~3 个地球。' },
 
   saturn: { map:'assets/planets/saturn.jpg', tint:[1.05,1.0,0.92], atm:[0.95,0.84,0.60], atmK:0.10, obl:26.7, rot:10.7, dist:4.9, ring:true,
-    kick:'SATURN · 9.58 AU', title:'土星', en:'SATURN',
+    kick:'SATURN · 9.58 AU',
+    say:'土星直径 120000 公里，是第二大行星，平均密度比水还轻。它的环主要由无数冰块和岩石组成，宽 27 万公里，厚度却常常不到 10 米。已确认的卫星超过 270 颗，土卫六有浓密的大气。', audio:'assets/audio/saturn.wav', title:'土星', en:'SATURN',
     stats:[['直径','120,536 km · 地球的 9.4 倍'],['距日','14.32 亿 km'],['自转','10.7 小时'],
            ['云顶温度','约 -140 ℃'],['卫星','274 颗（已知最多）']],
     note:'主环从内侧 7 万 km 铺到 13.6 万 km，由亿万个水冰颗粒组成，主体厚度大多不足 10 米。环缝是土卫的引力清出来的。平均密度只有 0.69 g/cm³，比水轻。' },
 
   uranus: { map:'assets/planets/uranus.jpg', tint:[0.98,1.02,1.04], atm:[0.55,0.88,0.98], atmK:0.22, obl:97.8, rot:-17.2, dist:2.85,
-    kick:'URANUS · 19.2 AU', title:'天王星', en:'URANUS',
+    kick:'URANUS · 19.2 AU',
+    say:'天王星直径 51000 公里，是一颗冰巨星，大气里的甲烷让它呈青蓝色。它的自转轴几乎躺倒在轨道面上，倾角约 98 度，所以两极各有长达 42 年的极昼和极夜。', audio:'assets/audio/uranus.wav', title:'天王星', en:'URANUS',
     stats:[['直径','51,118 km · 地球的 4.0 倍'],['距日','28.67 亿 km'],['自转','17.2 小时（逆行）'],
            ['温度','约 -195 ℃'],['转轴倾角','97.8°（躺着转）']],
     note:'96% 是氢与氦，甲烷吸收了红光，剩下青蓝。它的自转轴几乎躺在轨道面上，于是一年里有一半时间是极昼、一半是极夜——这是太阳系唯一的"侧滚"行星。' },
 
   neptune: { map:'assets/planets/neptune.jpg', tint:[0.94,0.98,1.06], atm:[0.38,0.62,1.0], atmK:0.22, obl:28.3, rot:16.1, dist:2.85,
-    kick:'NEPTUNE · 30.1 AU', title:'海王星', en:'NEPTUNE',
+    kick:'NEPTUNE · 30.1 AU',
+    say:'海王星直径 49000 公里，是离太阳最远的行星，平均距离约 45 亿公里。阳光到这里已经很弱，温度约零下 200 度。它的风速可达每小时 2100 公里，是太阳系风最猛的地方。', audio:'assets/audio/neptune.wav', title:'海王星', en:'NEPTUNE',
     stats:[['直径','49,528 km · 地球的 3.9 倍'],['距日','45.15 亿 km'],['自转','16.1 小时'],
            ['温度','约 -200 ℃'],['风速','可达 2,100 km/h']],
     note:'太阳系最猛的风在这里。它是唯一一颗先用数学推算位置、再被望远镜找到的行星——1846 年，勒维耶算出它该在哪里，伽勒当晚就看到了。' },
@@ -1400,6 +1425,47 @@ ringMesh.visible = false;
 planetGroup.add(ringMesh);
 
 /* 特写 HUD 按 key 填字 */
+/* 讲解：每颗星一张 16k 单体人声，点一次读一遍，再点停 */
+let sayAudio = null, sayKey = '';
+const sayEl = document.getElementById('shSay');
+function sayLabel(on) {
+  sayEl.classList.toggle('playing', !!on);
+  sayEl.querySelector('span').textContent = on ? '停止' : '讲解';
+}
+function sayStop() {
+  if (sayAudio) { try { sayAudio.pause(); sayAudio.currentTime = 0; } catch (e) {} }
+  sayKey = '';
+  sayLabel(false);
+}
+function sayToggle(ev) {
+  if (ev) { ev.stopPropagation(); if (ev.cancelable) ev.preventDefault(); }
+  const key = VIEWC.key;
+  const cfg = PLANET_VIEWS[key];
+  if (!cfg || !cfg.audio) return;
+  if (sayAudio && sayKey === key && !sayAudio.paused) { sayStop(); return; }
+  sayStop();
+  if (!sayAudio) {
+    sayAudio = new Audio();
+    sayAudio.preload = 'auto';
+    sayAudio.addEventListener('ended', sayStop);
+  }
+  sayKey = key;
+  sayAudio.src = cfg.audio;
+  const pr = sayAudio.play();
+  if (pr && pr.catch) pr.catch(() => { sayStop(); });
+  sayLabel(true);
+}
+// 手机端同样用 pointerup 抢在合成 click 之前，去掉可能的双触发
+let sayLast = 0;
+function sayTap(ev) {
+  const now = performance.now();
+  if (ev.type === 'click' && now - sayLast < 600) { ev.stopPropagation(); return; }
+  sayLast = now;
+  sayToggle(ev);
+}
+sayEl.addEventListener('pointerup', sayTap);
+sayEl.addEventListener('click', sayTap);
+
 function fillViewHud(key) {
   const c = PLANET_VIEWS[key];
   const $ = (id) => document.getElementById(id);
@@ -1428,11 +1494,15 @@ function viewUpdate(now) {
   // 日冕片永远挡在球后面且正对相机
   sunCorona.position.set(0, 0, 0).addScaledVector(new THREE.Vector3().subVectors(new THREE.Vector3(0, 0, 0), viewCam.position).normalize(), 1.45);
   sunCorona.quaternion.copy(viewCam.quaternion);
-  // 行星自转：按真实自转周期的同一比例放慢（逆行取负号），一分钟左右转一圈才有得看
+  // 自由自转：真实周期（金星 5832 小时）照搬会一动不动，按"一圈 80~240 秒"重标定，
+  // 方向仍按真实顺行/逆行取符号；相位从进入那一刻起算，别拿页面启动时间当相位
+  const el = (now - VIEWC.spinT0) * 0.001;
   if (!cfg.proc && cfg.rot) {
-    // 从进入的那一刻起算，别拿页面启动时间当相位（否则每次进来朝向都不一样）
-    const el = (now - VIEWC.spinT0) * 0.001;
-    planetMesh.rotation.y = (cfg.rot0 || 0) + el * (2 * Math.PI / (cfg.rot * 3600)) * 900;
+    const rev = Math.max(80, Math.min(240, Math.abs(cfg.rot) * 9));   // 秒/圈
+    const dir = cfg.rot < 0 ? -1 : 1;
+    planetMesh.rotation.y = (cfg.rot0 || 0) + dir * el * (2 * Math.PI / rev);
+  } else if (cfg.proc) {
+    sunMesh.rotation.y = el * (2 * Math.PI / 200);   // 太阳表面缓慢自转，别让等离子体“钉死”
   }
 }
 
@@ -1442,6 +1512,7 @@ function enterView(key) {
   if (!cfg) return;
   if (tour.on) tourStop(true);
   hideInfo();
+  sayStop();              // 换一颗星，上一段讲解立刻收声
   VIEWC.key = key; VIEWC.yaw = 0; VIEWC.pitch = 0;
   state.vYaw = 0;          // 进特写前把滑行清掉，回来时镜头不能自己漂
   // 竖屏手机上下窄：相机后撤一档，否则球顶到画框、左下角 HUD 直接压在盘面上
@@ -1472,6 +1543,7 @@ function enterView(key) {
 }
 function exitView() {
   if (!VIEWC.on || VIEWC.phase === 'out') return;
+  sayStop();              // 离开特写，讲解跟着停
   VIEWC.phase = 'out'; VIEWC.t0 = performance.now();
 }
 // 返回也吃 pointerup：手机端不必依赖合成 click（exitView 自己有 phase 守卫，重复调用无害）
