@@ -32,6 +32,16 @@
   #enter:hover{background:rgba(235,231,223,.07);border-color:rgba(235,231,223,.42);transform:translateY(-1px)}
   #boot .tip{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.2em;color:var(--faint);
     opacity:.7}
+  /* 入场前的自动定位 / 校时回显 */
+  #boot .probe{display:flex;flex-direction:column;gap:7px;justify-content:center;align-items:center;
+    font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.14em;color:var(--dim);
+    margin-top:2px}
+  #boot .probe span{display:flex;align-items:center;gap:8px;opacity:0;transform:translateY(3px);
+    transition:opacity .5s var(--ease),transform .5s var(--ease)}
+  #boot .probe span.in{opacity:.92;transform:none}
+  #boot .probe i{width:4px;height:4px;border-radius:50%;background:rgba(235,231,223,.5);flex:0 0 auto}
+  #boot .probe i.ok{background:#9fd2b4}
+  #boot .probe i.no{background:#c9a487}
   #boot .err{margin-top:10px;font-family:"JetBrains Mono",monospace;font-size:10px;line-height:1.7;
     color:#ff8f7a;max-width:70vw;opacity:.85;white-space:pre-wrap;text-align:left}
 
@@ -256,6 +266,10 @@
   <h1>星野</h1>
   <div class="sub">Solar System · Seen From Earth</div>
   <div class="note">以地球为眼，看太阳与七颗行星此刻的位置</div>
+  <div class="probe">
+    <span id="stGeo"><i id="stGeoDot"></i><b id="stGeoTxt">定位中…</b></span>
+    <span id="stTime"><i id="stTimeDot"></i><b id="stTimeTxt">校时中…</b></span>
+  </div>
   <button id="enter">入 夜</button>
   <div class="tip">拖拽转天 · 滚轮推时 · Ctrl+滚轮缩放 · 点清单可对准某颗</div>
   <div class="err" id="bootErr"></div>
@@ -381,6 +395,7 @@ import * as THREE from 'three';
 import { EffectComposer } from './jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from './jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from './jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from './jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from './jsm/postprocessing/OutputPass.js';
 
 /* ------------------------------------------------------------------ 常量 */
@@ -685,7 +700,7 @@ scene.add(stars);
 
 
 /* ------------------------------------------------------------ 远山剪影 */
-function makeRidge(radius, baseH, amp, seed, colorA, colorB) {
+function makeRidge(radius, baseH, amp, seed, colorA, colorB, opacity) {
   const COLS = 384;
   const pos = [], hAttr = [], idx = [];
   // 用整数频次的三角级数，保证 0/2π 接缝连续
@@ -721,6 +736,7 @@ function makeRidge(radius, baseH, amp, seed, colorA, colorB) {
       uColorB: { value: new THREE.Color(colorB) },
       uReveal: U.uReveal,
       uTime: U.uTime,
+      uOpacity: { value: opacity === undefined ? 1.0 : opacity },
     },
     vertexShader: /* glsl */`
       attribute float aH; varying float vH; varying vec3 vWorld;
@@ -733,13 +749,13 @@ function makeRidge(radius, baseH, amp, seed, colorA, colorB) {
     fragmentShader: /* glsl */`
       precision highp float;
       varying float vH; varying vec3 vWorld;
-      uniform vec3 uColorA, uColorB; uniform float uReveal, uTime;
+      uniform vec3 uColorA, uColorB; uniform float uReveal, uTime, uOpacity;
       void main(){
         float n = 0.85 + 0.15 * sin(vWorld.x * 0.02 + uTime * 0.05) * cos(vWorld.z * 0.017);
         vec3 col = mix(uColorA, uColorB, smoothstep(0.0, 1.0, vH)) * n;
         float horizon = smoothstep(-6.0, 34.0, vWorld.y);
         col += vec3(0.05, 0.06, 0.10) * (1.0 - horizon) * 0.55;
-        gl_FragColor = vec4(col * uReveal, 1.0);
+        gl_FragColor = vec4(col * uReveal * uOpacity, 1.0);
         #include <colorspace_fragment>
       }`,
   });
@@ -747,18 +763,27 @@ function makeRidge(radius, baseH, amp, seed, colorA, colorB) {
   mesh.frustumCulled = false;
   return mesh;
 }
-scene.add(makeRidge(520, 34, 120, 3, '#02040a', '#080c16'));
-scene.add(makeRidge(340, 14, 72, 11, '#03050c', '#0a0f1c'));
-scene.add(makeRidge(215, 2, 36, 29, '#04060e', '#0c1220'));
+// 极淡远山：只留地平线上一点起伏，压住草原的天际线（约 6% 对比度）
+scene.add(makeRidge(1500, 6, 22, 3, '#05070d', '#0a1018', 0.34));
 
 
-/* ------------------------------------------------------------ 水面映射 */
+/* -------------------------------------------------------------- 草原地面 */
+/*
+ * 原方案是"三层远山 + 湖泊倒影"。草原要的是另一种真实：
+ * 一块平的、能一直铺到地平线的地面 —— 相机的"高度"于是有了真实含义
+ * （y 从 150 落到 3 时，几何地平线自己会抬起来），不需要任何假动画。
+ */
+const GROUND_R = 2600;
 (() => {
-  const g = new THREE.CircleGeometry(640, 96, 0, Math.PI * 2);
+  const g = new THREE.CircleGeometry(GROUND_R, 128, 0, Math.PI * 2);
   g.rotateX(-Math.PI / 2);
   const m = new THREE.ShaderMaterial({
     transparent: true,
-    uniforms: { ...U, uEqToGal: { value: galacticMatrix() }, uSkyInv: U.uSkyInv },
+    uniforms: {
+      ...U,
+      uFogCol: { value: new THREE.Vector3(0.0272, 0.0352, 0.0452) },
+      uGroundR: { value: GROUND_R },
+    },
     vertexShader: /* glsl */`
       varying vec3 vWorld;
       void main(){
@@ -769,32 +794,117 @@ scene.add(makeRidge(215, 2, 36, 29, '#04060e', '#0c1220'));
     fragmentShader: /* glsl */`
       precision highp float;
       varying vec3 vWorld;
-      uniform mat3 uSkyInv, uEqToGal; uniform float uTime, uReveal, uLimitMag, uMilkyGain, uVoice;
+      uniform float uTime, uReveal, uGroundR;
+      uniform vec3 uFogCol;
       ${GLSL_NOISE}
-      ${GLSL_SKYBASE}
       void main(){
-        vec3 V = normalize(vWorld - cameraPosition);
-        // 镜像方向（法线朝上）
-        vec3 R = vec3(V.x, -V.y, V.z);
-        float alt = clamp(-V.y, 0.0, 1.0);
         vec2 p = vWorld.xz;
-        float ripple = vnoise(vec2(p.x * 0.05, p.y * 0.16 + uTime * 0.20)) - 0.5;
-        R.x += ripple * 0.035 * (1.0 + uVoice * 0.7);
-        R.z += ripple * 0.020;
-        R.y = max(R.y, 0.10);
-        vec3 col = skyBase(normalize(R), uTime);
-        vec3 e = uSkyInv * normalize(R);
-        col += milky(e, uMilkyGain) * 0.30 * mix(0.55, 1.0, smoothstep(12.0, 42.0, uFov)) * smoothstep(5.2, 8.0, uLimitMag);
-        float d = length(vWorld.xz) / 640.0;
-        float fade = smoothstep(1.0, 0.35, d) * smoothstep(0.0, 0.25, alt);
-        gl_FragColor = vec4(col * fade * 0.34 * uReveal, 1.0);
+        float n1 = fbm(p * 0.0042);          // 大尺度地块明暗
+        float n2 = fbm(p * 0.085);           // 草皮颗粒
+        float n3 = vnoise(p * 0.42);         // 极细噪点，防"塑料平面"
+        float tuft = vnoise(p * 2.4) * vnoise(p * 7.1);     // 草簇：中近景的颗粒感
+        vec3 dark  = vec3(0.0118, 0.0192, 0.0150);
+        vec3 lit   = vec3(0.0245, 0.0368, 0.0288);
+        vec3 col = mix(dark, lit, clamp(n1 * 0.78 + n2 * 0.30 + tuft * 0.22, 0.0, 1.0));
+        col *= 0.78 + 0.22 * n3;
+        // 远处融进天际雾：避免出现"一堵绿墙"的硬边
+        float r = length(p) / uGroundR;
+        col = mix(col, uFogCol, smoothstep(0.07, 0.46, r));
+        // 掠射角上的一点星光反照（代替原来的水面镜面，强度只有 1/3）
+        float down = -normalize(vWorld - cameraPosition).y;
+        float graze = 1.0 - smoothstep(0.03, 0.34, down);
+        col += vec3(0.0130, 0.0170, 0.0245) * graze * 0.38;
+        // 圆盘边界：高空俯视时圆盘会露出一个"弧形山包"，用高度驱动的淡出抹掉；
+        // 站在地面上（camH≈3）时几乎不淡出，地平线保持清晰
+        float fadeStart = mix(0.998, 0.40, smoothstep(5.0, 130.0, cameraPosition.y));
+        float edge = 1.0 - smoothstep(fadeStart, 1.0, r);
+        gl_FragColor = vec4(col * uReveal, edge * uReveal);
         #include <colorspace_fragment>
       }`,
   });
-  const water = new THREE.Mesh(g, m);
-  water.position.y = -0.2;
-  water.frustumCulled = false;
-  scene.add(water);
+  const ground = new THREE.Mesh(g, m);
+  ground.position.y = 0;
+  ground.frustumCulled = false;
+  scene.add(ground);
+})();
+
+
+/* ------------------------------------------------------------ 近景草叶 */
+/*
+ * 8000 株交叉双面片（移动端 3000），撒在相机周围 2–26 的环带里。
+ * 顶点着色器按株相位做风摆，片元按 uv 做"上尖下宽"的刀形裁切 —— 不依赖贴图。
+ */
+const grassBlades = (() => {
+  const COUNT = (window.innerWidth <= 860 || window.devicePixelRatio > 2.5) ? 9000 : 24000;
+  const pos = [], uvA = [], phaseA = [], tintA = [], idx = [];
+  let vi = 0;
+  let seed = 987654321;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < COUNT; i++) {
+    // 半径用 sqrt 分布 → 近处更密（远处的草叶本来就被像素吃掉了）
+    // 两圈：近处 2–22 密集，远处 22–58 稀疏（抬望眼时脚前那片也是草，不是平板）
+    const rad = rnd() < 0.62 ? (1.8 + Math.sqrt(rnd()) * 20.2) : (22 + rnd() * 36);
+    const ang = rnd() * Math.PI * 2;
+    const x = Math.cos(ang) * rad, z = Math.sin(ang) * rad;
+    const h = 0.30 + Math.pow(rnd(), 2.0) * 1.05;
+    const w = 0.045 + rnd() * 0.055;
+    const rot = rnd() * Math.PI;
+    const cs = Math.cos(rot), sn = Math.sin(rot);
+    const ph = rnd() * 6.283, tint = rnd();
+    const quads = [
+      [[-0.5, 0, 0], [0.5, 0, 0], [0.5, 1, 0], [-0.5, 1, 0]],
+      [[0, 0, -0.5], [0, 0, 0.5], [0, 1, 0.5], [0, 1, -0.5]],
+    ];
+    for (const q of quads) {
+      const base = vi;
+      for (const v of q) {
+        const lx = v[0] * w, ly = v[1] * h, lz = v[2] * w;
+        pos.push(x + lx * cs - lz * sn, ly, z + lx * sn + lz * cs);
+        uvA.push((v[0] !== 0 ? v[0] : v[2]) + 0.5, v[1]);
+        phaseA.push(ph);
+        tintA.push(tint);
+        vi++;
+      }
+      idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setIndex(idx);
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uvA), 2));
+  g.setAttribute('aPhase', new THREE.BufferAttribute(new Float32Array(phaseA), 1));
+  g.setAttribute('aTint', new THREE.BufferAttribute(new Float32Array(tintA), 1));
+  const m = new THREE.ShaderMaterial({
+    side: THREE.DoubleSide,
+    uniforms: { uTime: U.uTime, uReveal: U.uReveal },
+    vertexShader: /* glsl */`
+      attribute float aPhase, aTint;
+      varying vec2 vUv; varying float vTint;
+      uniform float uTime;
+      void main(){
+        vUv = uv; vTint = aTint;
+        vec3 p = position;
+        float sway = sin(uTime * 1.15 + aPhase) * 0.085 + sin(uTime * 2.60 + aPhase * 1.7) * 0.026;
+        p.xz += vec2(sway, sway * 0.55) * uv.y * uv.y;   // 越靠草尖摆幅越大
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+      }`,
+    fragmentShader: /* glsl */`
+      precision highp float;
+      varying vec2 vUv; varying float vTint;
+      uniform float uReveal;
+      void main(){
+        float halfW = 0.5 * (1.0 - pow(vUv.y, 1.45));       // 上尖下宽
+        if (abs(vUv.x - 0.5) > halfW) discard;
+        vec3 base = mix(vec3(0.0165, 0.0300, 0.0215), vec3(0.0300, 0.0490, 0.0340), vTint);
+        base *= 0.50 + 1.05 * vUv.y;                        // 草尖更亮，像接住了星光
+        gl_FragColor = vec4(base * uReveal, 1.0);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const mesh = new THREE.Mesh(g, m);
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  return mesh;
 })();
 
 
@@ -803,6 +913,45 @@ const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.70, 0.55, 0.22);
 composer.addPass(bloom);
+
+/* 星光飞逝：沿画面中心方向的径向模糊。点精灵没法拉长，就整帧抹出速度感 */
+const WARP = { value: 0 };
+const WarpShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uWarp: WARP,
+    uCenter: { value: new THREE.Vector2(0.5, 0.52) },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`
+    precision highp float;
+    varying vec2 vUv;
+    uniform sampler2D tDiffuse;
+    uniform float uWarp;
+    uniform vec2 uCenter;
+    void main(){
+      float s = uWarp * 0.105;
+      if (s < 0.0012) { gl_FragColor = texture2D(tDiffuse, vUv); return; }
+      vec2 dir = vUv - uCenter;
+      vec3 acc = vec3(0.0);
+      float wsum = 0.0;
+      for (int i = 0; i < 24; i++) {
+        float f = float(i) / 23.0;
+        float w = 1.0 - f * 0.72;                  // 越靠近当前位置权重越大，尾巴自然变淡
+        vec2 uv = vUv - dir * (f * s);
+        acc += texture2D(tDiffuse, clamp(uv, vec2(0.0008), vec2(0.9992))).rgb * w;
+        wsum += w;
+      }
+      gl_FragColor = vec4(acc / wsum, 1.0);
+    }`,
+};
+const warpPass = new ShaderPass(WarpShader);
+// ShaderPass 会 clone uniforms，必须把 uWarp 换回同一个对象引用，否则 WARP.value 改了不生效
+warpPass.uniforms.uWarp = WARP;
+composer.addPass(warpPass);
+
 composer.addPass(new OutputPass());
 
 
@@ -1582,6 +1731,8 @@ let downX = 0, downY = 0, downT = 0;
 
 function onDown(e) {
   if (!booted) return;
+  // 入场镜头期间：任何按下都是"跳过"，不接管视角
+  if (CINE.active) { cineSkip(); return; }
   // 控件上的按下不算拖拽（滑杆、按钮、清单行都要能正常操作）
   if (e.target && e.target.closest && e.target.closest('input, .pill, .speed, .row, #panel, #boot')) return;
   state.dragging = true;
@@ -1648,7 +1799,7 @@ function setFov(v) {
   state.zoomAt = performance.now();
 }
 window.addEventListener('wheel', (e) => {
-  if (!booted) return;
+  if (!booted || CINE.active) return;
   // Ctrl / ⌘ + 滚轮（触控板捏合）= 视场缩放；单独滚轮仍然是推时间
   if (e.ctrlKey || e.metaKey) {
     e.preventDefault();
@@ -2067,6 +2218,66 @@ document.getElementById('btnGeo').addEventListener('click', () => {
 document.getElementById('btnNow').addEventListener('click', () => {
   state.timeMs = Date.now(); refreshEphem(true);
 });
+
+/* ------------------------------------------ 入场前：自动定位 + 校时（遮罩回显） */
+const p2 = (n) => String(n).padStart(2, '0');
+
+function setProbe(id, cls, txt) {
+  const row = document.getElementById(id);
+  const dot = document.getElementById(id + 'Dot');
+  const t = document.getElementById(id + 'Txt');
+  if (!row || !dot || !t) return;
+  dot.className = cls === 'ok' ? 'ok' : cls === 'no' ? 'no' : '';
+  t.textContent = txt;
+  row.classList.add('in');
+}
+
+function probeTime() {
+  const now = new Date();
+  const off = -now.getTimezoneOffset() / 60;
+  const offStr = `UTC${off >= 0 ? '+' : '−'}${Number.isInteger(off) ? Math.abs(off) : Math.abs(off).toFixed(1)}`;
+  // 恒星时随经度变，所以定位回来之后要再算一次
+  const lstH = (((lstRad(state.timeMs) / DEG) / 15) % 24 + 24) % 24;
+  const lstStr = `${p2(Math.floor(lstH))}:${p2(Math.floor((lstH % 1) * 60))}`;
+  // 白天打开会自动落到 21:30，那一刻的"观测时刻"和本机时钟不是一回事，得写清楚
+  const drift = Math.abs(now.getTime() - state.timeMs);
+  const obs = new Date(state.timeMs);
+  const obsStr = drift > 90e3
+    ? ` · 观测 ${p2(obs.getMonth() + 1)}-${p2(obs.getDate())} ${p2(obs.getHours())}:${p2(obs.getMinutes())}`
+    : '';
+  setProbe('stTime', 'ok',
+    `校时 ${p2(now.getMonth() + 1)}-${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())} · ${offStr} · 恒星时 ${lstStr}${obsStr}`);
+}
+
+function probeGeo() {
+  const q = new URLSearchParams(location.search);
+  const pinLat = parseFloat(q.get('lat')), pinLon = parseFloat(q.get('lon'));
+  if (isFinite(pinLat) && isFinite(pinLon)) {
+    setProbe('stGeo', 'ok', `定位 按链接参数 · ${(LAT / DEG).toFixed(2)}°N ${LONGITUDE.toFixed(2)}°E`);
+    return;
+  }
+  const site = `${(LAT / DEG).toFixed(2)}°N ${LONGITUDE.toFixed(2)}°E`;
+  if (!navigator.geolocation) { setProbe('stGeo', 'no', `定位 浏览器不支持 · 用默认 ${site}`); return; }
+  // geolocation 只在 secure context 可用：localhost / HTTPS 行，裸 http 公网会被浏览器直接拒
+  if (!window.isSecureContext) { setProbe('stGeo', 'no', `定位 需 HTTPS · 用默认 ${site}`); return; }
+  setProbe('stGeo', '', '定位中…（浏览器会询问一次权限）');
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      setSite(pos.coords.latitude, pos.coords.longitude);
+      setProbe('stGeo', 'ok',
+        `定位 ${(LAT / DEG).toFixed(2)}°N ${LONGITUDE.toFixed(2)}°E` + (pos.coords.accuracy > 2000 ? '（精度较低）' : ''));
+      probeTime();                       // 经度变了，地方恒星时要重算
+    },
+    (err) => {
+      const why = err && err.code === 1 ? '未授权' : err && err.code === 3 ? '超时' : '定位失败';
+      setProbe('stGeo', 'no', `${why} · 用默认 ${site}`);
+    },
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+  );
+}
+
+probeTime();
+probeGeo();
 const pauseBtn = document.getElementById('btnPause');
 const speedBtns = [...document.querySelectorAll('#speed .s[data-k]')];
 function applySpeedVisual() {
@@ -2180,9 +2391,9 @@ function tick() {
   const dt = Math.min(0.05, (now - t0) / 1000);
   t0 = now;
 
-  // 时间推进：1× = 真实流逝；惯性衰减
+  // 时间推进：1× = 真实流逝；入场时叠一个 CINE.boost（7200×）做"斗转"；惯性衰减
   if (!state.dragging) {
-    state.timeMs += dt * state.speed * 1000;
+    state.timeMs += dt * (state.speed + (CINE.active ? CINE.boost : 0)) * 1000;
     if (Math.abs(state.velocity) > 1e-4) {
       state.timeMs += state.velocity * dt * 3600e3;
       state.velocity *= Math.exp(-dt * 2.2);
@@ -2197,17 +2408,21 @@ function tick() {
   U.uSky.value.copy(sky);
   U.uSkyInv.value.copy(sky).transpose();
 
-  // 相机
-  if (state.focus) {
-    state.yaw += (state.focus.yaw - state.yaw) * Math.min(1, dt * 4.2);
-    state.pitch += (state.focus.pitch - state.pitch) * Math.min(1, dt * 4.2);
-    if (Math.abs(state.focus.yaw - state.yaw) < 0.002 && Math.abs(state.focus.pitch - state.pitch) < 0.002) state.focus = null;
+  // 相机：入场期间由 cineTick 全权接管（高度/滚转/俯仰/视场/模糊）
+  if (CINE.active) {
+    cineTick(now);
+  } else {
+    if (state.focus) {
+      state.yaw += (state.focus.yaw - state.yaw) * Math.min(1, dt * 4.2);
+      state.pitch += (state.focus.pitch - state.pitch) * Math.min(1, dt * 4.2);
+      if (Math.abs(state.focus.yaw - state.yaw) < 0.002 && Math.abs(state.focus.pitch - state.pitch) < 0.002) state.focus = null;
+    }
+    camera.rotation.y = state.yaw;
+    camera.rotation.x = state.pitch;
   }
-  camera.rotation.y = state.yaw;
-  camera.rotation.x = state.pitch;
   updateCompass(false);
   if (!scrubHeld) scrubSyncValue();
-  if (Math.abs(state.fovTarget - state.fov) > 0.005) {
+  if (!CINE.active && Math.abs(state.fovTarget - state.fov) > 0.005) {
     state.fov += (state.fovTarget - state.fov) * Math.min(1, dt * 9);
     camera.fov = state.fov;
     camera.updateProjectionMatrix();
@@ -2268,43 +2483,163 @@ function tick() {
 }
 
 /* ---------------------------------------------------------------- 入夜 */
-function enterNight() {
-  if (booted) return;
-  booted = true;
-  const boot = document.getElementById('boot');
-  boot.classList.add('hide');
-  document.getElementById('hud').style.opacity = '1';
-  state.ready = true;
-  applyConstVisual();
+/*
+ * 入场是一段四拍的镜头，不是一次淡入：
+ *   ① 苏醒   —— 星星从暗里亮起来
+ *   ② 斗转   —— 时间倍率飙到 7200×，天球整体飞转，径向模糊把星光抹成流向
+ *   ③ 下坠   —— 相机高度 150 → 3，几何地平线自己升上来（真实透视，不是假动画）
+ *   ④ 触地 / 抬望眼 —— 落地一次过冲回弹 + 轻微震屏，再把视线抬到 +0.55
+ * 全程只改 6 个量：时间倍率、相机 y / rotation.z、pitch、fov、uReveal、uWarp。
+ */
+const CINE = {
+  active: false,
+  t0: 0,
+  dur: 4.0,
+  fovEnd: 58,
+  pitchEnd: 0.28,
+  pitchStart: 0.50,
+  camY: 3,
+  dropY: 150,
+  boost: 0,
+  skipped: false,
+  hold: -1,
+};
+
+const lerp = (a, b, k) => a + (b - a) * k;
+const seg = (t, a, b) => Math.max(0, Math.min(1, (t - a) / (b - a)));
+const ease = (x) => x * x * (3 - 2 * x);
+window.__cine = CINE;      // 调试用：可以把 t0 往前挪，定格看某一段
+
+function cineStart() {
+  const q = new URLSearchParams(location.search);
+  CINE.active = true;
+  CINE.t0 = performance.now();
+  CINE.skipped = false;
+  CINE.dur = q.get('cine') === 'fast' ? 2.6 : 4.0;
+  // ?cineT=0.55 可以定格在序列的某一点（调参、截图用）
+  const holdT = parseFloat(q.get('cineT'));
+  CINE.hold = isFinite(holdT) ? Math.max(0, Math.min(0.995, holdT)) : -1;
+  CINE.fovEnd = state.fov;
+  const pinPitch = parseFloat(q.get('pitch'));
+  CINE.pitchEnd = isFinite(pinPitch) ? pinPitch : 0.28;
+  // 直接接管相机，先把它抬到空中
+  camera.position.set(0, CINE.dropY, 0);
+  camera.rotation.z = 0;
+  document.getElementById('hud').style.opacity = '0';
+  document.getElementById('hud').style.pointerEvents = 'none';
+  U.uReveal.value = 0.02;
+  U.uLines.value = 0.02;
+  WARP.value = 0;
+}
+
+function cineSkip() {
+  if (!CINE.active) return;
+  CINE.skipped = true;
+}
+
+function cineTick(now) {
+  const t = CINE.hold >= 0 ? CINE.hold : Math.min(1, (now - CINE.t0) / (CINE.dur * 1000));
+
+  // —— 时间倍率：起飞 → 巡航 → 触地前收油
+  CINE.boost = 7200 * ease(seg(t, 0.10, 0.28)) * (1 - 0.985 * ease(seg(t, 0.46, 0.72)));
+
+  // —— 星亮度：先透出一层微光，落地后才满亮
+  if (t < 0.52) {
+    U.uReveal.value = lerp(0.02, 0.30, ease(seg(t, 0.0, 0.13)));
+  } else {
+    U.uReveal.value = lerp(0.30, 1.0, ease(seg(t, 0.74, 0.98)));
+  }
+  U.uLines.value = U.uReveal.value;
+
+  // —— 视场：先撑开到 104°（广角畸变就是"速度感"），落地后收回
+  let fov;
+  if (t < 0.32) fov = lerp(CINE.fovEnd, 104, ease(seg(t, 0.08, 0.32)));
+  else if (t < 0.72) fov = 104;
+  else fov = lerp(104, CINE.fovEnd, ease(seg(t, 0.72, 0.98)));
+  state.fov = state.fovTarget = fov;
+  camera.fov = fov;
+  camera.updateProjectionMatrix();
+  U.uFov.value = fov;
+
+  // —— 滚转：斗转时压一个 8° 的侧倾，落地前回正
+  camera.rotation.z = -0.14 * ease(seg(t, 0.10, 0.34)) * (1 - ease(seg(t, 0.50, 0.72)));
+
+  // —— 高度：0.36 之后开始下坠，二次缓入（越接近地面越快）
+  let camY = CINE.dropY;
+  if (t > 0.34) {
+    camY = lerp(CINE.dropY, CINE.camY, Math.pow(seg(t, 0.34, 0.72), 2));
+  }
+  let shake = 0;
+  if (t >= 0.72 && t < 0.84) {
+    const k = seg(t, 0.72, 0.84);
+    camY = CINE.camY - 0.85 * Math.sin(k * Math.PI);          // 落地过冲 + 回弹
+    shake = Math.sin(k * Math.PI) * 0.022;
+  }
+  camera.position.set((Math.random() - 0.5) * shake, camY, 0);
+
+  // —— 俯仰：先仰头看星，下坠时压到贴地平，落地后抬望眼
+  let pitch;
+  if (t < 0.36) pitch = CINE.pitchStart;
+  else if (t < 0.74) pitch = lerp(CINE.pitchStart, -0.16, ease(seg(t, 0.36, 0.74)));
+  else pitch = lerp(-0.16, CINE.pitchEnd, ease(seg(t, 0.76, 1.0)));
+  state.pitch = pitch;
+
+  // —— 径向模糊
+  let warp = ease(seg(t, 0.12, 0.32));
+  if (t > 0.60) warp *= (1 - 0.58 * ease(seg(t, 0.60, 0.72)));
+  if (t >= 0.72 && t < 0.84) warp = Math.max(warp, 0.40 * Math.sin(seg(t, 0.72, 0.84) * Math.PI));
+  if (t > 0.84) warp = lerp(warp, 0, ease(seg(t, 0.84, 1.0)));
+  WARP.value = warp;
+
+  camera.rotation.x = pitch;
+  camera.rotation.y = state.yaw;
+
+  if (CINE.hold >= 0) return;
+  if (t >= 1 || CINE.skipped) landNow();
+}
+
+function landNow() {
+  if (!CINE.active) return;
+  CINE.active = false;
+  CINE.boost = 0;
+  U.uReveal.value = 1;
+  U.uLines.value = 1;
+  WARP.value = 0;
+  camera.position.set(0, 3, 0);
+  camera.rotation.z = 0;
+  state.pitch = CINE.pitchEnd;
+  state.fov = state.fovTarget = CINE.fovEnd;
+  camera.fov = state.fov;
+  camera.updateProjectionMatrix();
+  U.uFov.value = state.fov;
+  const hud = document.getElementById('hud');
+  hud.style.opacity = '1';
+  hud.style.pointerEvents = '';
+
+  // 落地后**不再**自动对准天体：那一下会把视线抬到天上，草原就出画了。
+  // 终帧保持"抬望眼 + 脚下一片草"的构图，要看哪颗天体让用户自己点。
   const q = new URLSearchParams(location.search);
   if (q.get('info')) setTimeout(showInfo, 900);
   if (q.get('tour')) setTimeout(() => { document.getElementById('btnTour').classList.add('on'); tourStart(); }, 1400);
-
-  // 揭示动画：亮度由 0 推上去
-  const t0r = performance.now();
-  const step = () => {
-    const t = Math.min(1, (performance.now() - t0r) / 1400);
-    const e = 1 - Math.pow(1 - t, 3);
-    U.uReveal.value = e;
-    U.uLines.value = e;
-    if (t < 1) requestAnimationFrame(step);
-  };
-  step();
-
-  // 自动对准：在可见天体里挑"够高、够亮"的一颗开场
-  const best = currentEphem
-    .map((b, i) => ({ i, b, alt: bodyWorld[i].y / SKY_R }))
-    .filter(o => o.alt > 0.12 && o.b.key !== 'sun')
-    .sort((a, b2) => (b2.alt * 0.6 + (-b2.b.mag) * 0.4) - (a.alt * 0.6 + (-a.b.mag) * 0.4))[0];
-  const pinned = new URLSearchParams(location.search).get('yaw');
-  if (best && !pinned) {
-    const w = bodyWorld[best.i].clone().normalize();
-    state.yaw = Math.atan2(-w.x, -w.z);
-    state.pitch = Math.min(0.62, Math.max(0.18, Math.asin(w.y)));
-    state.focus = { yaw: state.yaw, pitch: state.pitch };
-  }
-
   setTimeout(() => { hintEl.style.opacity = '0'; }, 5200);
+}
+
+function enterNight() {
+  if (booted) return;
+  booted = true;
+  document.getElementById('boot').classList.add('hide');
+  state.ready = true;
+  applyConstVisual();
+  const cine = new URLSearchParams(location.search).get('cine');
+  if (cine === '0') {
+    // 直接落到终态：截图、调试、或者不喜欢动画的人用
+    CINE.fovEnd = state.fov;
+    CINE.pitchEnd = state.pitch;
+    CINE.active = true;          // landNow 会把它关掉
+    landNow();
+  } else {
+    cineStart();
+  }
 }
 document.getElementById('enter').addEventListener('click', enterNight);
 document.getElementById('boot').addEventListener('click', enterNight);
