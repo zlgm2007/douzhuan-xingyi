@@ -260,8 +260,9 @@
     font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.12em;white-space:nowrap;
     color:rgba(235,231,223,.8);opacity:0;transition:opacity .4s;text-shadow:0 0 8px rgba(0,0,0,.9)}
   .lab i{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:6px;vertical-align:middle}
-  .lab.flab{font-size:9px;letter-spacing:.08em;color:rgba(235,231,223,.62)}
-  .lab.flab b{font-weight:400;color:rgba(235,231,223,.34);margin-left:5px}
+  .lab.flab{font-size:10px;letter-spacing:.1em;color:rgba(235,231,223,.9)}
+  .lab.flab b{font-weight:400;color:rgba(207,224,255,.58);margin-left:6px}
+  .lab.flab.down{color:rgba(235,231,223,.45)}
 
   /* 天体介绍卡片 */
   #card{position:fixed;left:0;top:0;z-index:14;width:236px;padding:13px 15px 14px;
@@ -2328,7 +2329,8 @@ fGeo.setAttribute('aMag', new THREE.BufferAttribute(fMagArr, 1));
 fGeo.setAttribute('aCol', new THREE.BufferAttribute(fColArr, 3));
 const fMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-  uniforms: { uPixelRatio: U.uPixelRatio, uFov: U.uFov, uOpacity: { value: 1.0 } },
+  uniforms: { uPixelRatio: U.uPixelRatio, uFov: U.uFov, uOpacity: { value: 1.0 },
+              uTime: { value: 0 } },
   vertexShader: /* glsl */`
     attribute float aMag; attribute vec3 aCol;
     uniform float uPixelRatio, uFov, uOpacity;
@@ -2339,20 +2341,24 @@ const fMat = new THREE.ShaderMaterial({
       float f = pow(10.0, -0.4 * (aMag - 1.0));
       vA = vis * uOpacity;
       vC = aCol;
-      gl_PointSize = clamp(4.6 + 3.0 * pow(f, 0.32), 4.2, 12.0) * uPixelRatio
-                     * pow(58.0 / uFov, 0.30);
+      // 这是「标记」不是星光：屏幕尺寸恒定、不随视场缩小，缩到全天空也认得出
+      gl_PointSize = (10.0 + 3.5 * clamp(f, 0.0, 1.0)) * uPixelRatio * 1.9;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(w, 1.0);
     }`,
   fragmentShader: /* glsl */`
     precision highp float;
+    uniform float uTime;
     varying float vA; varying vec3 vC;
     void main(){
       vec2 p = gl_PointCoord * 2.0 - 1.0;
       float d = sqrt(dot(p, p));
       if (d > 1.0) discard;
-      float core = exp(-d * d * 3.4);
-      float ring = exp(-pow((d - 0.62) * 4.2, 2.0)) * 0.20;   // 一圈很淡的标记环，深空天体也看得见
-      gl_FragColor = vec4(vC * (core + ring) * vA, 1.0);
+      float core = exp(-d * d * 22.0);                                     // 中心一颗小实心点
+      float ring = exp(-pow((d - 0.70) * 11.0, 2.0));                      // 一圈细环
+      float tick = step(0.70, d) * step(d, 0.97)
+                 * (step(abs(p.x), 0.05) + step(abs(p.y), 0.05)) * 0.55;   // 环外四个方向的短刻度
+      float pulse = 0.72 + 0.28 * sin(uTime * 1.5);                        // 缓慢呼吸，静止画面里也看得见
+      gl_FragColor = vec4(vC * (core * 1.0 + ring * 0.30 * pulse + tick * 0.38 * pulse) * vA, 1.0);
       #include <colorspace_fragment>
     }`,
 });
@@ -2496,7 +2502,17 @@ const constRowEls = GROUPS.map((c, i) => {
     el.innerHTML = `<span class="dot" style="background:${f.color};color:${f.color}"></span>
       <span class="nm">${f.cn}<small>${f.en.toUpperCase()} · ${f.short} 光年</small></span>`;
     el.classList.add('fam');
-    el.addEventListener('click', () => { showFamousCard(i); focusFamous(i); });
+    el.addEventListener('click', () => {
+      showFamousCard(i);
+      placeCard(0, 0);                             // 卡片贴右上（placeCard 内按 selectedFamous 早返回）
+      const r = focusFamous(i, { fly: true });
+      if (r.raised && window.innerWidth > 860) {   // 手机屏上卡片已占满上方，这条提示会叠在卡片上
+        const d = new Date(state.timeMs);
+        toast(`已把观测时刻拨到 ${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}，让它在天上`);
+      } else if (!r.ok) {
+        toast(`${FAMOUS[i].cn} 在这个纬度永不升起，只能看卡片`);
+      }
+    });
     rowsConst.appendChild(el);
   });
 }
@@ -2527,7 +2543,7 @@ const labelEls = BODIES.map(b => {
 const flabelEls = FAMOUS.map(f => {
   const el = document.createElement('div');
   el.className = 'lab flab';
-  el.innerHTML = `<i style="background:${f.color}"></i>${f.cn}<b>${f.short} ly</b>`;
+  el.innerHTML = `<i style="background:${f.color}"></i>${f.cn}<b>${f.short} 光年</b>`;
   document.getElementById('labels').appendChild(el);
   return el;
 });
@@ -2755,10 +2771,24 @@ const clabEl = document.getElementById('clab');
 function placeCard(sx, sy) {
   const W = window.innerWidth, H = window.innerHeight;
   const cw = cardEl.offsetWidth || 232, chh = cardEl.offsetHeight || 168, gapX = 22;
+  // 窄屏（手机竖屏）：卡片满宽贴顶，把下面留给准星和导览条
+  if (W <= 860 && (tour.on || selectedFamous >= 0)) {
+    cardEl.style.left = '12px';
+    cardEl.style.right = '12px';
+    cardEl.style.width = 'auto';
+    cardEl.style.top = '118px';     // 让开顶部那排按钮
+    return;
+  }
   // 演示动线里卡片固定停在右上，别跟着（可能在地平线下的）目标乱跑、也别压住导览条
   if (tour.on) {
     cardEl.style.left = `${Math.max(12, W - cw - 26)}px`;
     cardEl.style.top = '118px';
+    return;
+  }
+  // 「尺度阶梯」这 8 个：卡片固定停在左侧中部 —— 右边是选择清单，中间是准星和标签，都别压
+  if (selectedFamous >= 0 && W > 860) {
+    cardEl.style.left = '26px';
+    cardEl.style.top = `${Math.max(118, Math.min(H - chh - 130, 300))}px`;
     return;
   }
   let cx = sx + gapX;
@@ -2811,11 +2841,60 @@ function showCard(i) {
 }
 
 /* 尺度阶梯那 8 个天体：卡片里给「类型 / 距离 / 光走多久」三行硬信息 */
-function focusFamous(i) {
-  const w = fWorld[i];
-  if (!w || w.y / SKY_R < 0.02) return false;   // 地平线以下：只弹卡片
-  aimAt(w);
-  return true;
+/* 这一刻这颗星的地平高度（sin 值），只跟恒星时有关 */
+function altSinAtMs(i, ms) {
+  return fDir[i].clone().applyMatrix3(skyMatrix(lstRad(ms))).y;
+}
+/* 这一刻太阳的地平高度（sin 值），只用来判断是不是夜里 */
+function sunAltSinAtMs(ms) {
+  const d = ms / 86400000 + 2440587.5 - 2451545.0;
+  const L = (280.460 + 0.9856474 * d) * DEG;                 // 太阳平黄经
+  const ra = Math.atan2(Math.cos(OBLIQ) * Math.sin(L), Math.cos(L));
+  const dec = Math.asin(Math.sin(OBLIQ) * Math.sin(L));
+  const h = lstRad(ms) - ra;
+  return Math.sin(LAT) * Math.sin(dec) + Math.cos(LAT) * Math.cos(dec) * Math.cos(h);
+}
+/* 找出最近一个「它够高、而且天是黑的」时刻
+   顺序：此刻 → 往后 12 小时 → 往前 12 小时（都还在这一夜附近）→ 按季节扫一年
+   人马座 A* 这类低赤纬天体，南京最高才 29°，要等对季节才够高 */
+function findUpTime(i, targetDeg = 22) {
+  const want = Math.sin(targetDeg * DEG);
+  const okAt = (t) => altSinAtMs(i, t) >= want && sunAltSinAtMs(t) < -0.20;   // 太阳低于 -11.5°，算天黑
+  const t0 = state.timeMs;
+  if (okAt(t0)) return t0;
+  const MIN = 60 * 1000, HOUR = 60 * MIN;
+  for (let dir of [1, -1]) {                   // 同一夜：先往后找，再往前找
+    for (let k = 1; k <= 240; k++) {
+      const t = t0 + dir * k * 3 * MIN;
+      if (okAt(t)) return t;
+    }
+  }
+  for (let k = 1; k <= 2200; k++) {            // 换季：4 小时步长扫一年
+    const t = t0 + k * 4 * HOUR;
+    if (okAt(t)) return t;
+  }
+  return null;
+}
+/* 对准这颗星；目标在地平线下时可选把钟拨到它升起来的时候（演示动线要「转到它身上」） */
+function focusFamous(i, opts) {
+  const fly = !!(opts && opts.fly);
+  let w = fWorld[i];
+  let raised = false;
+  if ((!w || w.y / SKY_R < 0.02) && fly) {
+    const t = findUpTime(i);
+    if (t != null) {
+      state.timeMs = t; raised = true;
+      w = fDir[i].clone().applyMatrix3(skyMatrix(lstRad(state.timeMs))).multiplyScalar(SKY_R);
+    }
+  }
+  if (!w || w.y / SKY_R < 0.02) return { ok: false, raised: false };   // 这个纬度永远看不到：只弹卡片
+  const d = w.clone().normalize();
+  const alt = Math.asin(Math.max(-1, Math.min(1, d.y)));
+  const halfV = state.fov * DEG / 2;
+  // 演示要“转到它身上”：横屏压在画面中上部；竖屏把目标压到下半，别忘了上面还有卡片
+  const k = window.innerWidth <= 860 ? -0.30 : 0.18;
+  state.focus = { yaw: Math.atan2(-d.x, -d.z), pitch: Math.max(0.02, alt - k * halfV) };
+  return { ok: true, raised };
 }
 
 function showFamousCard(i, sx, sy) {
@@ -3086,9 +3165,15 @@ const LIGHTTOUR = FAMOUS.map((f, i) => ({
   ms: 7000,
   run() {
     setTab('const');
-    showFamousCard(i);
-    focusFamous(i);            // 地平线以上才转镜头，下面的一律只弹卡片
     if (state.fov > 52) setFov(52);
+    showFamousCard(i);
+    // 转到这颗星上：在地平线下就把钟拨到它升起的时候，然后再对准
+    const r = focusFamous(i, { fly: true });
+    if (!r.ok) toast(`${f.cn} 在南天 · 南京纬度看不到，卡片里是它真实的距离`);
+    else if (r.raised && window.innerWidth > 860) {
+      const d = new Date(state.timeMs);
+      toast(`观测时刻 → ${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}（它在这时才升到天上）`, 2000);
+    }
   },
 }));
 
@@ -3564,6 +3649,7 @@ function tick() {
   updateBodies(sky);
   updateEcliptic();
   if (state.showConst) updateConst(sky); else updateFamous(sky);
+  fMat.uniforms.uTime.value = now / 1000;   // 准星呼吸
 
   // 太阳高度 → 天光
   const sunAlt = bodyWorld[0].y / SKY_R;
@@ -3943,12 +4029,13 @@ setInterval(() => {
     const p = w.clone().project(camera);
     const el = flabelEls[i];
     const alt = w.clone().normalize().y;
-    const on = state.showLabels && p.z < 1 && p.x > -1.05 && p.x < 1.05 && Math.abs(p.y) < 1.05 && alt > 0.02;
+    // 这 8 个是「光走了多久」的目标：标签常显，不跟「标签」开关走
+    const on = p.z < 1 && p.x > -1.05 && p.x < 1.05 && Math.abs(p.y) < 1.05 && alt > 0.02;
     if (!on) { el.style.opacity = '0'; continue; }
     const sx = (p.x * 0.5 + 0.5) * window.innerWidth;
     const sy = (-p.y * 0.5 + 0.5) * window.innerHeight;
     el.style.transform = `translate(${sx}px, ${sy}px) translate(-50%,-150%)`;
-    el.style.opacity = '0.7';
+    el.style.opacity = '0.92';
   }
 
   // 尺度阶梯天体
