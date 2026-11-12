@@ -237,7 +237,7 @@
     font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.18em;color:var(--faint);
     transition:opacity .8s;white-space:nowrap;max-width:92vw;text-align:center}
   /* 落地后"已对准某某"的短提示（独立于 #hint，不会被主循环改写） */
-  #toast{position:absolute;left:50%;top:clamp(120px,17vh,190px);transform:translate(-50%,-4px);
+  #toast{position:absolute;left:50%;top:clamp(84px,10.6vh,124px);transform:translate(-50%,-4px);
     font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.16em;color:var(--dim);
     padding:7px 16px;border:1px solid rgba(235,231,223,.13);border-radius:999px;
     background:rgba(9,12,20,.55);backdrop-filter:blur(8px);pointer-events:none;
@@ -2615,9 +2615,14 @@ function toast(msg, ms = 3200) {
    白昼（太阳在地平线以上）→ 对准太阳；夜里 → 对准北极星。
    北极星并非任何地方都看得到：赤纬 +89.3°，只有北纬 ≥0.7° 才永远在地平线上，
    低纬它贴着地平线、南半球直接在地平线下 —— 所以带上纬度兜底。 */
+/* 对准一个天体，但不硬居中：把目标推到画面上部，下半留出天空和草原。
+   正中的话太阳（高度 30°+）会把地平线挤出画面，"抬望眼 + 脚下一片草"就没了。 */
 function aimAt(dir) {
   const d = dir.clone().normalize();
-  state.focus = { yaw: Math.atan2(-d.x, -d.z), pitch: Math.asin(Math.max(-1, Math.min(1, d.y))) };
+  const alt = Math.asin(Math.max(-1, Math.min(1, d.y)));
+  const halfV = state.fov * DEG / 2;                 // 竖直半视场（state.fov 是角度）
+  const pitch = Math.max(0.09, Math.min(0.55, alt - 0.62 * halfV));
+  state.focus = { yaw: Math.atan2(-d.x, -d.z), pitch };
 }
 
 function gotoNow() {
@@ -2640,7 +2645,7 @@ function gotoNow() {
     toast(`此刻是夜 · 已对准北极星（高度约 ${(Math.asin(polaris.y) / DEG).toFixed(0)}°，正北）`);
   } else {
     // 纬度太低 / 南半球：北极星贴地平线或在地平线以下，硬对准会盯住一片黑
-    state.focus = { yaw: 0, pitch: 0.06 };
+    state.focus = { yaw: 0, pitch: 0.10 };           // 正北天区 + 地平线，草地在下方
     toast(`本地（${latDeg.toFixed(1)}°）看不到北极星 · 已对准正北方的天区`);
   }
 }
