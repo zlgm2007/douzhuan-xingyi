@@ -12,7 +12,12 @@
     --ease:cubic-bezier(.22,1,.36,1);
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%;background:var(--ink);color:var(--paper);overflow:hidden}
+  html,body{height:100%;background:var(--ink);color:var(--paper);overflow:hidden;
+    /* 手机上手指按在天区拖拽 = 转视角，绝不能让浏览器当成页面拖动／下拉刷新，
+       否则中途来一发 pointercancel，拖拽被切成一段一段的（"一小步一小步"的来源） */
+    touch-action:none;overscroll-behavior:none;-webkit-overflow-scrolling:touch}
+  /* 需要纵向滑动的地方单独放开手势：清单与卡片内部还能滚 */
+  #panel,#card{touch-action:pan-y}
   body{font-family:"Noto Serif SC","Songti SC",serif;-webkit-font-smoothing:antialiased}
   #app{position:fixed;inset:0}
   #app canvas{display:block;pointer-events:none}
@@ -1438,6 +1443,7 @@ function enterView(key) {
   if (tour.on) tourStop(true);
   hideInfo();
   VIEWC.key = key; VIEWC.yaw = 0; VIEWC.pitch = 0;
+  state.vYaw = 0;          // 进特写前把滑行清掉，回来时镜头不能自己漂
   // 竖屏手机上下窄：相机后撤一档，否则球顶到画框、左下角 HUD 直接压在盘面上
   const narrow = window.innerWidth < 700 && window.innerHeight > window.innerWidth;
   VIEWC.dist = (cfg.dist || 2.55) * (narrow ? 1.45 : 1);
@@ -1876,6 +1882,7 @@ const state = {
   pitch: (() => { const v = parseFloat(new URLSearchParams(location.search).get('pitch')); return isFinite(v) ? v : 0.34; })(),
   dragging: false,
   lastX: 0, lastY: 0, lastT: 0,
+  vYaw: 0,               // 触摸松手后的滑行角速度（rad/s）
   velocity: 0,          // 拖拽惯性（小时/秒）
   focus: null,          // 目标天体的世界方向
   fov: (() => { const v = parseFloat(new URLSearchParams(location.search).get('fov')); return isFinite(v) ? Math.max(6, Math.min(78, v)) : 58; })(),
@@ -2293,6 +2300,8 @@ refreshEphem(true);
 
 /* ----------------------------------------------------------- 拖拽 / 滚轮 */
 const appEl = renderer.domElement;
+// 触摸设备（手机/平板）：用来决定要不要给"松手滑行"，鼠标端保持 1:1 直接停
+const TOUCHY = !!(window.matchMedia && matchMedia('(pointer:coarse)').matches);
 let booted = false;
 
 let downX = 0, downY = 0, downT = 0;
@@ -2308,29 +2317,47 @@ function onDown(e) {
   // 手机端（touchend 后重新命中测试）那个 click 就落不到按钮上，表现成"点了没反应"
   if (e.target && e.target.closest && e.target.closest('input, .pill, .speed, .row, #panel, #boot, #card, #sunHud, #tourbar')) return;
   state.dragging = true;
+  state.vYaw = 0;          // 新的按下打断上一次的滑行
   state.lastX = e.clientX; state.lastY = e.clientY; state.lastT = performance.now();
   state.focus = null;      // 手动拖拽立刻接管视角，取消正在进行的自动对准
   downX = e.clientX; downY = e.clientY; downT = performance.now();
 }
+/* 触摸移动事件按屏幕刷新率合帧到达，一帧里可能压了好几个采样点；
+   getCoalescedEvents() 取回它们逐个消费，转动才跟手而不"一格一格跳" */
+function movePoints(e) {
+  const c = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
+  return (c && c.length) ? c : [e];
+}
 function onMove(e) {
   if (VIEWC.on) {
     if (!VIEWC.drag) return;
-    const dx = e.clientX - VIEWC.lastX, dy = e.clientY - VIEWC.lastY;
-    VIEWC.lastX = e.clientX; VIEWC.lastY = e.clientY;
-    VIEWC.yaw = Math.max(-0.55, Math.min(0.55, VIEWC.yaw - dx * 0.0035));
-    VIEWC.pitch = Math.max(-0.42, Math.min(0.42, VIEWC.pitch - dy * 0.0030));
+    for (const pt of movePoints(e)) {
+      const dx = pt.clientX - VIEWC.lastX, dy = pt.clientY - VIEWC.lastY;
+      VIEWC.lastX = pt.clientX; VIEWC.lastY = pt.clientY;
+      VIEWC.yaw = Math.max(-0.55, Math.min(0.55, VIEWC.yaw - dx * 0.0035));
+      VIEWC.pitch = Math.max(-0.42, Math.min(0.42, VIEWC.pitch - dy * 0.0030));
+    }
     return;
   }
   if (!state.dragging) return;
-  const dx = e.clientX - state.lastX;
-  const dy = e.clientY - state.lastY;
-  state.lastX = e.clientX; state.lastY = e.clientY;
-  state.lastT = performance.now();
-  // 拖拽 = 转视角：一屏宽 ≈ 一个视场角，直接映射（无惯性积分，事件批量到达也不跳）
+  // 拖拽 = 转视角：一屏宽 ≈ 一个视场角，直接 1:1 映射
   const yawK = (state.fov * DEG) / Math.max(320, window.innerWidth);
   const pitchK = (state.fov * DEG) / Math.max(320, window.innerHeight);
-  state.yaw += dx * yawK;
-  state.pitch = Math.max(-0.30, Math.min(0.88, state.pitch + dy * pitchK));
+  let dxSum = 0;
+  for (const pt of movePoints(e)) {
+    const dx = pt.clientX - state.lastX, dy = pt.clientY - state.lastY;
+    state.lastX = pt.clientX; state.lastY = pt.clientY;
+    state.yaw += dx * yawK;
+    state.pitch = Math.max(-0.30, Math.min(0.88, state.pitch + dy * pitchK));
+    dxSum += dx;
+  }
+  // 松手滑行用的角速度（只有触摸设备算，PC 鼠标跟原来一样松手即停）
+  if (TOUCHY) {
+    const now = performance.now();
+    const dtm = Math.max(16, now - (state.lastT || now));
+    state.vYaw = (dxSum * yawK) / (dtm / 1000) * 0.55;   // 0.55 是"跟手感"折扣，避免一甩飞出去
+  }
+  state.lastT = performance.now();
 }
 function onUp(e) {
   if (VIEWC.on) { VIEWC.drag = false; return; }
@@ -3147,6 +3174,12 @@ function tick() {
   if (CINE.active) {
     cineTick(now);
   } else {
+    // 触摸松手后的滑行：指数衰减，转到底自然停住
+    if (!state.dragging && state.vYaw) {
+      state.yaw += state.vYaw * dt;
+      state.vYaw *= Math.exp(-dt / 0.42);
+      if (Math.abs(state.vYaw) < 0.006) state.vYaw = 0;
+    }
     if (state.focus) {
       state.yaw += (state.focus.yaw - state.yaw) * Math.min(1, dt * 4.2);
       state.pitch += (state.focus.pitch - state.pitch) * Math.min(1, dt * 4.2);
@@ -3446,7 +3479,8 @@ function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   // composer 的 RT 要跟 canvas 的物理像素对齐：只给 CSS 尺寸的话，
   // 高 dpr 屏上后处理只画到画布左上角一块（手机尤其明显，桌面因为被终局 quad 拉伸才不明显）
-  const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+  // 触摸设备像素密集、GPU 弱：1.75 会很吃力，滑起来发涩，收一档到 1.5
+  const dpr = Math.min(window.devicePixelRatio || 1, TOUCHY ? 1.5 : 1.75);
   renderer.setPixelRatio(dpr);
   renderer.setSize(w, h);
   if (composer && composer.setPixelRatio) composer.setPixelRatio(dpr);
