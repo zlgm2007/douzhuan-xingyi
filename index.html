@@ -67,6 +67,19 @@
   .pill:hover{color:var(--paper);border-color:rgba(235,231,223,.4)}
   .pill.on{color:var(--paper);border-color:rgba(235,231,223,.5);background:rgba(235,231,223,.09)}
 
+  .tourwrap{position:relative}
+  .tourwrap .car{font-style:normal;font-size:8px;opacity:.55;margin-left:2px}
+  #tourMenu{position:absolute;right:0;top:calc(100% + 8px);z-index:20;width:196px;padding:6px;
+    border:1px solid rgba(235,231,223,.16);border-radius:10px;background:rgba(4,7,14,.94);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 16px 40px rgba(0,0,0,.55);
+    opacity:0;transform:translateY(-6px);pointer-events:none;transition:.22s var(--ease)}
+  #tourMenu.on{opacity:1;transform:none;pointer-events:auto}
+  #tourMenu .tm{padding:8px 10px;border-radius:7px;cursor:pointer;transition:.18s}
+  #tourMenu .tm:hover{background:rgba(235,231,223,.08)}
+  #tourMenu .tm b{display:block;font-size:12px;font-weight:400;letter-spacing:.1em;color:var(--paper)}
+  #tourMenu .tm i{display:block;margin-top:3px;font-style:normal;font-family:"JetBrains Mono",monospace;
+    font-size:9px;letter-spacing:.04em;color:var(--faint)}
+
   /* 演示动线（导览条） */
   #tourbar{position:fixed;left:50%;bottom:clamp(86px,11.5vh,118px);z-index:16;width:min(520px,90vw);
     padding:12px 15px 11px;border:1px solid rgba(235,231,223,.16);border-radius:12px;
@@ -192,6 +205,11 @@
   /* 星球清单 */
   #panel{position:absolute;right:clamp(14px,2.6vw,36px);top:clamp(64px,9vh,104px);width:min(302px,48vw);
     padding:12px 4px 6px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  /* 条目变多以后清单要能在右下罗盘上方自己滚，不然最后几行会被罗盘和底栏切掉；
+     滚动只发生在这里，tab 与表头始终钉在顶上 */
+  #rows,#rowsConst{max-height:calc(100vh - 400px);overflow-y:auto;overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;overscroll-behavior:contain}
+  #rows::-webkit-scrollbar,#rowsConst::-webkit-scrollbar{width:0;height:0}
   #panel .hd{display:flex;justify-content:space-between;font-family:"JetBrains Mono",monospace;
     font-size:9.5px;letter-spacing:.2em;color:var(--faint);padding:0 8px 8px}
   .row{display:grid;grid-template-columns:9px 1fr 86px 34px;align-items:center;gap:8px;white-space:nowrap;
@@ -242,6 +260,8 @@
     font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.12em;white-space:nowrap;
     color:rgba(235,231,223,.8);opacity:0;transition:opacity .4s;text-shadow:0 0 8px rgba(0,0,0,.9)}
   .lab i{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .lab.flab{font-size:9px;letter-spacing:.08em;color:rgba(235,231,223,.62)}
+  .lab.flab b{font-weight:400;color:rgba(235,231,223,.34);margin-left:5px}
 
   /* 天体介绍卡片 */
   #card{position:fixed;left:0;top:0;z-index:14;width:236px;padding:13px 15px 14px;
@@ -267,9 +287,10 @@
   #card .go.off{display:none}
   #card .ch b{font-size:15px;font-weight:400;letter-spacing:.12em;color:var(--paper);
     flex:0 0 auto;white-space:nowrap}
+  /* 英文名宁可折行也别截成 “ANDROMEDA GAL…” */
   #card .ch em{font-style:normal;font-family:"JetBrains Mono",monospace;font-size:8.5px;
-    min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-    letter-spacing:.22em;color:var(--faint)}
+    min-width:0;white-space:normal;word-break:break-word;line-height:1.5;
+    letter-spacing:.18em;color:var(--faint)}
   #card .mt{margin-top:9px;font-family:"JetBrains Mono",monospace;font-size:9.5px;
     letter-spacing:.1em;color:var(--dim);display:flex;flex-wrap:wrap;gap:4px 12px;
     padding-bottom:9px;border-bottom:1px solid rgba(235,231,223,.10)}
@@ -376,7 +397,13 @@
     <div class="pill on" id="btnLabel">标签</div>
     <div class="pill on" id="btnEcl">黄道</div>
     <div class="pill on" id="btnConst">星座</div>
-    <div class="pill" id="btnTour">演示</div>
+    <div class="tourwrap">
+      <div class="pill" id="btnTour">演示 <i class="car">▾</i></div>
+      <div id="tourMenu">
+        <div class="tm" data-k="sys"><b>系统演示</b><i>黄道 · 星座 · 行星 · 岁差</i></div>
+        <div class="tm" data-k="light"><b>光走了多久</b><i>4.4 光年 → 24 亿光年</i></div>
+      </div>
+    </div>
     <div class="pill" id="btnInfo">黄道科普</div>
     <div class="pill on" id="btnBgm">夜曲</div>
     <div class="pill" id="btnGeo">定位</div>
@@ -2148,6 +2175,71 @@ const ASTER = [
 
 const GROUPS = CONSTS.concat(ASTER);
 
+/* 「光走了多久」的讲解词（每段 100 字以内，念完一句就能对上那束光走的时间） */
+const FAMOUS_SAY = {
+  cen:  '先看离我们最近的恒星：南门二，4.4 光年。你此刻看到的光，出发时还是 2022 年。它其实是三颗星，最小的那颗比邻星，只有 4.24 光年。',
+  sir:  '天狼星，8.6 光年，全天最亮。它身边藏着一颗白矮星，一茶匙就有五吨重。那是太阳这类恒星烧完以后的样子。',
+  bet:  '参宿四，约 550 光年。你看到的是明朝发出的光。这颗红超巨星直径是太阳的 700 倍，随时可能炸成超新星。',
+  m42:  '猎户座大星云，1344 光年，光出发时中国还在南宋。这里是恒星的产房，正在现场制造新的太阳系。',
+  m1:   '蟹状星云，6500 光年。公元 1054 年，北宋天文官记下这颗白天可见的客星；那束光走了 6500 年，正好在那一年抵达。',
+  sgra: '银河系中心，人马座 A 星，2.7 万光年。那里藏着一个四百万倍太阳质量的黑洞。你看到的光，出发时人类还在洞穴里画画。',
+  m31:  '仙女座星系，254 万光年，肉眼能看到的最远天体。光出发时，地球上刚出现能人。四十亿年后，它会和银河系撞在一起。',
+  q3c:  '类星体 3C 273，24 亿光年。光出发时，地球只有单细胞生命。它一秒放出的能量，超过整个银河系。',
+};
+
+/* ------------------------------------------------- 尺度阶梯（A 档·八个著名天体）
+   从 4.4 光年到 24 亿光年，每跳一档数量级；坐标取 J2000 赤经/赤纬（度）。
+   light = 光走多久（口语化，便于讲解词直接念）。 */
+const FAMOUS = [
+  { key:'cen', cn:'南门二', en:'Alpha Centauri', ra:219.9021, dec:-60.8340, ly:4.37,
+    kind:'三合星系统 · G2V + K1V + M5.5V', mag:-0.27, color:'#ffe7c9',
+    dist:'4.37 光年', light:'4 年 5 个月', short:'4.4',
+    desc:'离太阳最近的恒星系统。三颗星互相绕转：A、B 两颗类太阳恒星相距 4.1 光年处互绕，比邻星（C）在更外侧。比邻星 b 是已知最近的系外行星。',
+    note:'比你此刻看到的任何星都近：从地球发出的无线电，4 年多才到那里。它也是科幻里“第一站”的常客。' },
+
+  { key:'sir', cn:'天狼星', en:'Sirius', ra:101.2872, dec:-16.7161, ly:8.6,
+    kind:'A1V 主序星 + 白矮星伴星', mag:-1.46, color:'#dfe9ff',
+    dist:'8.6 光年', light:'8 年 7 个月', short:'8.6',
+    desc:'全天最亮的恒星，大犬座 α。它与一颗白矮星（天狼星 B）互绕，周期约 50 年。白矮星是太阳这类恒星燃尽后的残骸：质量接近太阳，体积却只有地球大小。',
+    note:'一茶匙白矮星物质约重 5 吨。天狼星 B 是人类发现的第二颗白矮星，也是“恒星终点”的第一个实样。' },
+
+  { key:'bet', cn:'参宿四', en:'Betelgeuse', ra:88.7929, dec:7.4070, ly:548,
+    kind:'红超巨星 · M1-2 Ia-ab', mag:0.50, color:'#ffb48a',
+    dist:'约 550 光年', light:'550 年', short:'550',
+    desc:'猎户座肩上的红超巨星，直径约太阳的 700 倍：放到太阳位置，会一直胀到火星轨道附近。质量约 15~20 倍太阳，寿命只有千万年量级，终将以超新星收场。',
+    note:'它随时可能爆发（天文尺度上的“随时”）。真爆的那天，白天也能看见，亮度接近满月，但 550 光年外的辐射对人无害。' },
+
+  { key:'m42', cn:'猎户座大星云', en:'Orion Nebula · M42', ra:83.8221, dec:-5.3911, ly:1344,
+    kind:'发射星云 · 恒星诞生区', mag:4.0, color:'#ffd9e8',
+    dist:'1344 光年', light:'1344 年', short:'1344',
+    desc:'银河系里离我们最近的大质量恒星形成区，肉眼在猎户的“佩剑”处就能看到一小团雾。里面藏着上千颗正在形成的恒星，中心的四边形星团正把周围气体电离发光。',
+    note:'你看到的每一颗新星，都在同一套流程里诞生：分子云坍缩、原恒星点亮、盘里滚出行星。这里就是“产房”的现场。' },
+
+  { key:'m1', cn:'蟹状星云', en:'Crab Nebula · M1', ra:83.6331, dec:22.0145, ly:6500,
+    kind:'超新星遗迹 · 中心脉冲星', mag:8.4, color:'#ffcfa8',
+    dist:'6500 光年', light:'6500 年', short:'6500',
+    desc:'公元 1054 年那次超新星的残骸。北宋天文官记下这颗“天关客星”：白天可见，持续 23 天。今天它是一团每秒膨胀约 1 光分的气体云，中心留着一颗每秒自转 30 圈的中子星。',
+    note:'这是中国古代天象记录与现代天体物理对上的最漂亮一例：一条宋朝的观测笔记，指向一颗中子星。' },
+
+  { key:'sgra', cn:'人马座 A*', en:'Sagittarius A*', ra:266.4168, dec:-29.0078, ly:26000,
+    kind:'超大质量黑洞 · 400 万倍太阳', mag:6.0, color:'#ff9aa0',
+    dist:'2.7 万光年', light:'2.7 万年', short:'2.7万',
+    desc:'银河系中心的超大质量黑洞，质量约 400 万倍太阳。恒星 S2 以 16 年周期绕它一圈，最近处速度接近光速的 1/4 —— 这是“看不见的质量”最硬的证据之一。',
+    note:'2022 年事件视界望远镜公布了它的照片：一圈亮环包着一块黑，那块黑就是连光都跑不出来的地方。' },
+
+  { key:'m31', cn:'仙女座星系', en:'Andromeda Galaxy · M31', ra:10.6847, dec:41.2690, ly:2.54e6,
+    kind:'旋涡星系 · 本星系群最大成员', mag:3.4, color:'#cfe0ff',
+    dist:'254 万光年', light:'254 万年', short:'254万',
+    desc:'离银河系最近的大星系，直径约 22 万光年，恒星数量以万亿计。肉眼在仙女座能看到一小片雾状光斑——那是 254 万年前出发的光。',
+    note:'它正以约 110 km/s 向我们靠近，约 40 亿年后与银河系合并，最终变成一个椭圆星系。夜空的样子会彻底改变。' },
+
+  { key:'q3c', cn:'类星体 3C 273', en:'Quasar', ra:187.2779, dec:2.0525, ly:2.4e9,
+    kind:'类星体 · 宇宙中最亮的一类天体', mag:12.9, color:'#dbe6ff',
+    dist:'24 亿光年', light:'24 亿年', short:'24亿',
+    desc:'第一个被认出的类星体（1963）。它由一个约 8 亿倍太阳质量的超大质量黑洞驱动，吸积盘把物质转化成光，亮度相当于整个银河系的百倍以上，却只集中在一个太阳系大小的区域。',
+    note:'你看到的是 24 亿年前的光：那时地球只有单细胞生物，氧气刚刚开始在大气里积累。望远镜就是时间机器。' },
+];
+
 /* ---- 展平成星点表 / 线段表 ---- */
 const cStars = [], cSegs = [], cRange = [];
 GROUPS.forEach(c => {
@@ -2226,6 +2318,65 @@ cStarPts.renderOrder = -4;
 cStarPts.frustumCulled = false;
 scene.add(cStarPts);
 
+/* ---- 尺度阶梯那 8 个天体：单独一层点精灵，颜色按天体类型给，亮星给得更大 ---- */
+const fPosArr = new Float32Array(FAMOUS.length * 3);
+const fMagArr = new Float32Array(FAMOUS.length);
+const fColArr = new Float32Array(FAMOUS.length * 3);
+const fGeo = new THREE.BufferGeometry();
+fGeo.setAttribute('position', new THREE.BufferAttribute(fPosArr, 3));
+fGeo.setAttribute('aMag', new THREE.BufferAttribute(fMagArr, 1));
+fGeo.setAttribute('aCol', new THREE.BufferAttribute(fColArr, 3));
+const fMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  uniforms: { uPixelRatio: U.uPixelRatio, uFov: U.uFov, uOpacity: { value: 1.0 } },
+  vertexShader: /* glsl */`
+    attribute float aMag; attribute vec3 aCol;
+    uniform float uPixelRatio, uFov, uOpacity;
+    varying float vA; varying vec3 vC;
+    void main(){
+      vec3 w = position;
+      float vis = smoothstep(0.0, 0.035, w.y / ${SKY_R.toFixed(1)});
+      float f = pow(10.0, -0.4 * (aMag - 1.0));
+      vA = vis * uOpacity;
+      vC = aCol;
+      gl_PointSize = clamp(4.6 + 3.0 * pow(f, 0.32), 4.2, 12.0) * uPixelRatio
+                     * pow(58.0 / uFov, 0.30);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(w, 1.0);
+    }`,
+  fragmentShader: /* glsl */`
+    precision highp float;
+    varying float vA; varying vec3 vC;
+    void main(){
+      vec2 p = gl_PointCoord * 2.0 - 1.0;
+      float d = sqrt(dot(p, p));
+      if (d > 1.0) discard;
+      float core = exp(-d * d * 3.4);
+      float ring = exp(-pow((d - 0.62) * 4.2, 2.0)) * 0.20;   // 一圈很淡的标记环，深空天体也看得见
+      gl_FragColor = vec4(vC * (core + ring) * vA, 1.0);
+      #include <colorspace_fragment>
+    }`,
+});
+const fPts = new THREE.Points(fGeo, fMat);
+fPts.renderOrder = -3; fPts.frustumCulled = false;
+scene.add(fPts);
+const fDir = FAMOUS.map(f => {
+  const ra = f.ra * DEG, dec = f.dec * DEG;
+  return new THREE.Vector3(Math.cos(dec) * Math.cos(ra), Math.cos(dec) * Math.sin(ra), Math.sin(dec));
+});
+const fWorld = FAMOUS.map(() => new THREE.Vector3());
+FAMOUS.forEach((f, i) => {
+  fMagArr[i] = f.mag;
+  const c = new THREE.Color(f.color);
+  fColArr[i * 3] = c.r; fColArr[i * 3 + 1] = c.g; fColArr[i * 3 + 2] = c.b;
+});
+function updateFamous(sky) {
+  for (let i = 0; i < FAMOUS.length; i++) {
+    fWorld[i].copy(fDir[i]).applyMatrix3(sky).multiplyScalar(SKY_R);
+    fPosArr[i * 3] = fWorld[i].x; fPosArr[i * 3 + 1] = fWorld[i].y; fPosArr[i * 3 + 2] = fWorld[i].z;
+  }
+  fGeo.attributes.position.needsUpdate = true;
+}
+
 /* ---- 连线：底图（全部星座，很淡）+ 选中层（只有选中那个，提亮） ---- */
 const cLineGeo = new THREE.BufferGeometry();
 cLineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(cSegs.length * 6), 3));
@@ -2253,6 +2404,7 @@ cHiGeo.setDrawRange(0, 0);
 /* ---- 每帧更新：世界坐标 + 连线 + 地平遮挡 ---- */
 const cHidden = new THREE.Vector3();
 function updateConst(sky) {
+  updateFamous(sky);
   cHidden.copy(camera.position).addScaledVector(camera.getWorldDirection(tmpV), -8);
   for (let k = 0; k < cStars.length; k++) {
     cWorld[k].copy(cStars[k].dir).applyMatrix3(sky).multiplyScalar(SKY_R);
@@ -2331,6 +2483,24 @@ const constRowEls = GROUPS.map((c, i) => {
   constRowEls.push(el);       // 高度用北极星自己的方向算，别用北斗中心
 }
 
+/* 「尺度阶梯」清单：8 个著名天体，点了弹卡片并把镜头轻轻转过去 */
+{
+  const sect = document.createElement('div');
+  sect.className = 'sect';
+  sect.textContent = '尺度阶梯 · 光走了多久';
+  rowsConst.appendChild(sect);
+  FAMOUS.forEach((f, i) => {
+    const el = document.createElement('div');
+    el.className = 'row';
+    // 距离并进名字一行，不去挤右边那两列（右下罗盘会压住最右列）
+    el.innerHTML = `<span class="dot" style="background:${f.color};color:${f.color}"></span>
+      <span class="nm">${f.cn}<small>${f.en.toUpperCase()} · ${f.short} 光年</small></span>`;
+    el.classList.add('fam');
+    el.addEventListener('click', () => { showFamousCard(i); focusFamous(i); });
+    rowsConst.appendChild(el);
+  });
+}
+
 const panelHd = document.getElementById('panelHd');
 document.getElementById('tabs').addEventListener('click', (e) => {
   const t = e.target.closest('.tab');
@@ -2349,6 +2519,15 @@ const labelEls = BODIES.map(b => {
   const el = document.createElement('div');
   el.className = 'lab';
   el.innerHTML = `<i style="background:${b.color}"></i>${b.cn}`;
+  document.getElementById('labels').appendChild(el);
+  return el;
+});
+
+/* 尺度阶梯那 8 个天体的名标（跟着点位走，标一下距离） */
+const flabelEls = FAMOUS.map(f => {
+  const el = document.createElement('div');
+  el.className = 'lab flab';
+  el.innerHTML = `<i style="background:${f.color}"></i>${f.cn}<b>${f.short} ly</b>`;
   document.getElementById('labels').appendChild(el);
   return el;
 });
@@ -2454,6 +2633,21 @@ function onUp(e) {
   });
   if (best >= 0) { selectBody(best, false); return; }
   if (e.target && e.target.closest && e.target.closest('#card, #sunHud, #tourbar, #tourEnd')) return;
+  // 尺度阶梯上的 8 个著名天体：给更大的命中半径（深空天体本身只是一个点）
+  if (true) {
+    let bf = -1, bfd = 26;
+    for (let i = 0; i < FAMOUS.length; i++) {
+      const w = fWorld[i];
+      if (!w || w.y / SKY_R < 0.0) continue;
+      const p = w.clone().project(camera);
+      if (p.z >= 1) continue;
+      const fx = (p.x * 0.5 + 0.5) * window.innerWidth;
+      const fy = (-p.y * 0.5 + 0.5) * window.innerHeight;
+      const fd = Math.hypot(fx - e.clientX, fy - e.clientY);
+      if (fd < bfd) { bfd = fd; bf = i; }
+    }
+    if (bf >= 0) { showFamousCard(bf, e.clientX, e.clientY); return; }
+  }
   // 行星没命中，再找星座亮星（半径 16px，取最近）
   if (state.showConst) {
     let bc = -1, bd = 16;     // bc 现在存的是星点索引
@@ -2555,11 +2749,18 @@ function ding(freq) {
 const cardEl = document.getElementById('card');
 let selectedIdx = -1;
 let selectedConst = -1;
+let selectedFamous = -1;
 const clabEl = document.getElementById('clab');
 
 function placeCard(sx, sy) {
   const W = window.innerWidth, H = window.innerHeight;
   const cw = cardEl.offsetWidth || 232, chh = cardEl.offsetHeight || 168, gapX = 22;
+  // 演示动线里卡片固定停在右上，别跟着（可能在地平线下的）目标乱跑、也别压住导览条
+  if (tour.on) {
+    cardEl.style.left = `${Math.max(12, W - cw - 26)}px`;
+    cardEl.style.top = '118px';
+    return;
+  }
   let cx = sx + gapX;
   if (cx + cw > W - 12) cx = sx - gapX - cw;
   // 窄屏时清单在左下角：卡片一律贴右侧，别和清单叠在一起
@@ -2609,12 +2810,42 @@ function showCard(i) {
   cardEl.classList.add('on');
 }
 
+/* 尺度阶梯那 8 个天体：卡片里给「类型 / 距离 / 光走多久」三行硬信息 */
+function focusFamous(i) {
+  const w = fWorld[i];
+  if (!w || w.y / SKY_R < 0.02) return false;   // 地平线以下：只弹卡片
+  aimAt(w);
+  return true;
+}
+
+function showFamousCard(i, sx, sy) {
+  const f = FAMOUS[i];
+  if (!f) return;
+  selectedFamous = i; selectedIdx = -1; selectedConst = -1; selectedStar = -1;
+  setConstBoost(-1); clabEl.style.opacity = '0';
+  document.getElementById('cardNote').classList.remove('hide');
+  document.getElementById('cardDot').style.background = f.color;
+  document.getElementById('cardDot').style.color = f.color;
+  document.getElementById('cardName').textContent = f.cn;
+  document.getElementById('cardEn').textContent = f.en.toUpperCase();
+  document.getElementById('cardDia').textContent = f.kind;
+  document.getElementById('cardDist').textContent = `距地 ${f.dist} · 光走了 ${f.light}`;
+  document.getElementById('cardDesc').textContent = f.desc;
+  document.getElementById('cardNote').textContent = f.note;
+  const goEl = document.getElementById('cardGo');
+  goEl.classList.add('off');        // 深空天体暂无独立特写场景
+  goEl.dataset.key = '';
+  cardEl.classList.add('on');
+  if (sx != null) placeCard(sx, sy);
+}
+
 function hideCard() {
   cardEl.classList.remove('on');
   cardEl.querySelector('.note').classList.add('hide');
   selectedIdx = -1;
   selectedConst = -1;
   selectedStar = -1;
+  selectedFamous = -1;
   setConstBoost(-1);
   clabEl.style.opacity = '0';
 }
@@ -2816,7 +3047,7 @@ function bestPlanet(skipMoon) {   // 此刻最高、够亮的行星（排除太�
   return best;
 }
 
-const TOUR = [
+const SYSTOUR = [
   { title: '① 黄道',
     audio: 'assets/tour/nar-1.mp4',
     text: '这条淡金色的斜线，是地球公转轨道面投在天球上的影子。太阳一年沿着它走一圈；行星和月亮，也都挤在它附近 —— 因为大家的轨道，几乎落在同一个平面上。',
@@ -2847,16 +3078,34 @@ const TOUR = [
     run() { showInfo(); } },
 ];
 
+/* 「光走了多久」：一条尺度阶梯，从最近的恒星走到类星体，每步只讲一句“光走了多久” */
+const LIGHTTOUR = FAMOUS.map((f, i) => ({
+  title: `${{1:'①',2:'②',3:'③',4:'④',5:'⑤',6:'⑥',7:'⑦',8:'⑧'}[i + 1]} ${f.cn} · ${f.dist}`,
+  audio: `assets/tour/light-${i + 1}.wav`,
+  text: FAMOUS_SAY[f.key],
+  ms: 7000,
+  run() {
+    setTab('const');
+    showFamousCard(i);
+    focusFamous(i);            // 地平线以上才转镜头，下面的一律只弹卡片
+    if (state.fov > 52) setFov(52);
+  },
+}));
+
+let TOUR = SYSTOUR;            // 当前正在跑的那条动线
+
 /* 旁白：女声、每步一段，讲完才进下一步；讲的时候把夜曲压低一档 */
 const narEl = new Audio();
 narEl.preload = 'auto';
-const narDur = TOUR.map(() => 0);
-TOUR.forEach((st, i) => {
-  if (!st.audio) return;
-  const probe = new Audio(st.audio);
+const narDur = new Map();       // 音频路径 → 时长（两条动线共用一张表）
+function probeDur(path) {
+  if (!path || narDur.has(path)) return;
+  narDur.set(path, 0);
+  const probe = new Audio(path);
   probe.preload = 'metadata';
-  probe.addEventListener('loadedmetadata', () => { narDur[i] = probe.duration || 0; });
-});
+  probe.addEventListener('loadedmetadata', () => narDur.set(path, probe.duration || 0));
+}
+SYSTOUR.concat(LIGHTTOUR).forEach(st => probeDur(st.audio));
 function narSpeak(i) {
   const st = TOUR[i];
   narEl.pause();
@@ -2873,7 +3122,8 @@ function narStop() {
 }
 function stepMs(i) {
   const st = TOUR[i];
-  if (st && st.audio && narDur[i] > 0.5) return narDur[i] * 1000 + 1600;   // 讲完留一口气
+  const d = st && st.audio ? (narDur.get(st.audio) || 0) : 0;
+  if (d > 0.5) return d * 1000 + 1600;      // 讲完留一口气
   return (st && st.ms) || STEP_MS;
 }
 
@@ -2889,8 +3139,9 @@ function tourRender() {
   tourProg.style.width = '0%';
 }
 
-function tourStart() {
+function tourStart(plan) {
   if (!state.ready) return;
+  TOUR = plan === 'light' ? LIGHTTOUR : SYSTOUR;
   tour.on = true; tour.idx = -1; tour.paused = false;
   tour.prevFov = state.fov;
   document.getElementById('tourPause').textContent = '暂停';
@@ -2942,10 +3193,33 @@ function tourTick(now) {
   if (t >= ms) tourNext();
 }
 
-document.getElementById('btnTour').addEventListener('click', () => {
-  if (tour.on) tourStop();
-  else { document.getElementById('btnTour').classList.add('on'); tourStart(); }
+/* 演示按钮：点开下拉，选一条动线；动线在跑时点它就是退出 */
+const tourMenuEl = document.getElementById('tourMenu');
+const btnTourEl = document.getElementById('btnTour');
+function tourMenuOpen(v) { tourMenuEl.classList.toggle('on', v); }
+btnTourEl.addEventListener('click', (e) => {
+  if (tour.on) { tourStop(); tourMenuOpen(false); return; }
+  tourMenuOpen(!tourMenuEl.classList.contains('on'));
+  e.stopPropagation();
 });
+tourMenuEl.addEventListener('click', (e) => {
+  const k = e.target.closest('.tm');
+  if (!k) return;
+  tourMenuOpen(false);
+  btnTourEl.classList.add('on');
+  tourStart(k.dataset.k);
+});
+document.addEventListener('pointerdown', (e) => {
+  if (tourMenuEl.classList.contains('on') && !e.target.closest('.tourwrap')) tourMenuOpen(false);
+});
+/* 老链接 ?tour=1 仍然跑「系统演示」；进场（state.ready）之前起不来，就等一会儿再试 */
+if (new URLSearchParams(location.search).get('tour') === '1') {
+  const autoTour = () => {
+    if (state.ready) { btnTourEl.classList.add('on'); tourStart('sys'); return; }
+    setTimeout(autoTour, 400);
+  };
+  setTimeout(autoTour, 600);
+}
 document.getElementById('tourPause').addEventListener('click', (e) => {
   if (!tour.on) return;
   tour.paused = !tour.paused;
@@ -3289,7 +3563,7 @@ function tick() {
 
   updateBodies(sky);
   updateEcliptic();
-  if (state.showConst) updateConst(sky);
+  if (state.showConst) updateConst(sky); else updateFamous(sky);
 
   // 太阳高度 → 天光
   const sunAlt = bodyWorld[0].y / SKY_R;
@@ -3662,8 +3936,30 @@ setInterval(() => {
     el.style.opacity = '0.8';
   });
 
-  // 星座/星群：卡片与名标跟着星座中心；单星则跟着那颗星
-  if (selectedStar >= 0) {
+  // 尺度阶梯：名标跟着点位，和「标签」开关同步
+  for (let i = 0; i < FAMOUS.length; i++) {
+    const w = fWorld[i];
+    if (!w) continue;
+    const p = w.clone().project(camera);
+    const el = flabelEls[i];
+    const alt = w.clone().normalize().y;
+    const on = state.showLabels && p.z < 1 && p.x > -1.05 && p.x < 1.05 && Math.abs(p.y) < 1.05 && alt > 0.02;
+    if (!on) { el.style.opacity = '0'; continue; }
+    const sx = (p.x * 0.5 + 0.5) * window.innerWidth;
+    const sy = (-p.y * 0.5 + 0.5) * window.innerHeight;
+    el.style.transform = `translate(${sx}px, ${sy}px) translate(-50%,-150%)`;
+    el.style.opacity = '0.7';
+  }
+
+  // 尺度阶梯天体
+  if (selectedFamous >= 0) {
+    const w = fWorld[selectedFamous].clone();
+    const p = w.clone().project(camera);
+    const sx = (p.x * 0.5 + 0.5) * window.innerWidth;
+    const sy = (-p.y * 0.5 + 0.5) * window.innerHeight;
+    placeCard(sx, sy);
+    clabEl.style.opacity = '0';
+  } else if (selectedStar >= 0) {
     const w = cWorld[selectedStar].clone();
     const p = w.clone().project(camera);
     const sx = (p.x * 0.5 + 0.5) * window.innerWidth;
