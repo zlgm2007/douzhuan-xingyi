@@ -264,6 +264,7 @@
     background:rgba(235,231,223,.035);transition:.22s}
   #card .go:hover{color:var(--paper);border-color:rgba(235,231,223,.46);background:rgba(235,231,223,.10)}
   #card .go i{font-style:normal;font-size:12px;line-height:1}
+  #card .go.off{display:none}
   #card .ch b{font-size:15px;font-weight:400;letter-spacing:.12em;color:var(--paper);
     flex:0 0 auto;white-space:nowrap}
   #card .ch em{font-style:normal;font-family:"JetBrains Mono",monospace;font-size:8.5px;
@@ -2601,7 +2602,10 @@ function showCard(i) {
   document.getElementById('cardDist').textContent =
     km < 2e6 ? `距地 ${(km / 10000).toFixed(1)} 万 km` : `距地 ${(km / 1e8).toFixed(2)} 亿 km`;
   document.getElementById('cardDesc').textContent = b.desc;
-  document.getElementById('cardGo').dataset.key = b.key;   // 这张卡对应的特写
+  // 只有九颗太阳系天体有特写场景：按钮露出来，并把 key 换掉
+  const goEl = document.getElementById('cardGo');
+  goEl.dataset.key = b.key;
+  goEl.classList.toggle('off', !(b.key && PLANET_VIEWS[b.key]));
   cardEl.classList.add('on');
 }
 
@@ -2671,6 +2675,9 @@ function showConstCard(i) {
   const note = document.getElementById('cardNote');
   note.textContent = c.note || CONST_NOTE;
   note.classList.remove('hide');
+  const goEl = document.getElementById('cardGo');
+  goEl.classList.add('off');          // 星座卡也没有特写场景
+  goEl.dataset.key = '';
   cardEl.classList.add('on');
   clabEl.innerHTML = `${c.cn}<small>${c.en.toUpperCase()}</small>`;
 }
@@ -2709,6 +2716,9 @@ function showStarCard(k) {
   const note = document.getElementById('cardNote');
   note.textContent = '天文提示：星等是"从地球看上去有多亮"，数值越小越亮，与恒星的真实光度不是一回事；距离则意味着我们看到的是它若干年前发出的光。';
   note.classList.remove('hide');
+  const goEl = document.getElementById('cardGo');
+  goEl.classList.add('off');          // 恒星/星座没有特写场景
+  goEl.dataset.key = '';
   cardEl.classList.add('on');
   clabEl.innerHTML = `${info.cn || g.cn}<small>${(info.bayer || g.en).toUpperCase()}</small>`;
 }
