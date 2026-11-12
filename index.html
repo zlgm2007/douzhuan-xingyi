@@ -186,15 +186,22 @@
   #sunHud .say.playing i{color:rgba(255,206,150,.95);animation:sayPulse 1.6s ease-in-out infinite}
   @keyframes sayPulse{0%,100%{opacity:.55}50%{opacity:1}}
 
-  /* 面板 Tab：太阳系 / 黄道十二星座 */
-  #panel .tabs{display:flex;gap:4px;margin:0 6px 9px;padding-bottom:9px;border-bottom:1px solid rgba(235,231,223,.10)}
-  #panel .tab{flex:1 1 0;text-align:center;font-family:"JetBrains Mono",monospace;font-size:9.5px;
+  /* 面板 Tab：太阳系 / 十二星座 / 群星（宽度不够就靠左右箭头翻） */
+  #panel .tabs{display:flex;align-items:center;gap:2px;margin:0 6px 9px;padding-bottom:9px;border-bottom:1px solid rgba(235,231,223,.10)}
+  #tabs .tnav{flex:0 0 18px;text-align:center;font-size:12px;line-height:1;color:var(--dim);cursor:pointer;
+    padding:4px 0;border:1px solid rgba(235,231,223,.16);border-radius:5px;user-select:none;
+    transition:color .3s,border-color .3s,opacity .3s;opacity:.8}
+  #tabs .tnav:hover,#tabs .tnav:active{opacity:1;border-color:rgba(235,231,223,.38)}
+  #tabs .tnav:hover{color:var(--paper)}
+  #tabWrap{flex:1 1 auto;min-width:0;display:flex;gap:4px;overflow:hidden;scroll-behavior:smooth;scrollbar-width:none}
+  #tabWrap::-webkit-scrollbar{width:0;height:0}
+  #panel .tab{flex:1 1 0;min-width:0;text-align:center;white-space:nowrap;overflow:hidden;font-family:"JetBrains Mono",monospace;font-size:9.5px;
     letter-spacing:.12em;color:var(--faint);padding:5px 4px;border:1px solid transparent;border-radius:5px;
     cursor:pointer;transition:.3s;white-space:nowrap}
   #panel .tab:hover{color:var(--paper)}
   #panel .tab.on{color:var(--paper);border-color:var(--line);background:rgba(235,231,223,.07)}
-  #rowsConst{display:none}
-  #rowsConst.show{display:block}
+  #rowsConst,#rowsStars{display:none}
+  #rowsConst.show,#rowsStars.show{display:block}
 
   /* 星座选中名标 */
   #clab{position:fixed;left:0;top:0;z-index:12;pointer-events:none;opacity:0;transition:opacity .4s;
@@ -207,9 +214,9 @@
     padding:12px 4px 6px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
   /* 条目变多以后清单要能在右下罗盘上方自己滚，不然最后几行会被罗盘和底栏切掉；
      滚动只发生在这里，tab 与表头始终钉在顶上 */
-  #rows,#rowsConst{max-height:calc(100vh - 400px);overflow-y:auto;overflow-x:hidden;
+  #rows,#rowsConst,#rowsStars{max-height:calc(100vh - 400px);overflow-y:auto;overflow-x:hidden;
     -webkit-overflow-scrolling:touch;scrollbar-width:none;overscroll-behavior:contain}
-  #rows::-webkit-scrollbar,#rowsConst::-webkit-scrollbar{width:0;height:0}
+  #rows::-webkit-scrollbar,#rowsConst::-webkit-scrollbar,#rowsStars::-webkit-scrollbar{width:0;height:0}
   #panel .hd{display:flex;justify-content:space-between;font-family:"JetBrains Mono",monospace;
     font-size:9.5px;letter-spacing:.2em;color:var(--faint);padding:0 8px 8px}
   .row{display:grid;grid-template-columns:9px 1fr 86px 34px;align-items:center;gap:8px;white-space:nowrap;
@@ -341,6 +348,8 @@
   @media (max-width: 860px){
     /* 窄屏：清单挪到左下角，别压在星空中央 */
     #panel{width:min(224px,58vw);top:auto;bottom:clamp(96px,14vh,140px);left:16px;right:auto}
+    #panel .tab{font-size:8px;letter-spacing:.04em;padding:5px 1px}
+    #tabs .tnav{flex:0 0 17px}
     .row{grid-template-columns:8px 1fr 44px;gap:8px}
     .row .nm{font-size:12px}
     .row .nm small{display:none}
@@ -413,12 +422,18 @@
 
   <div id="panel">
     <div class="tabs" id="tabs">
-      <div class="tab on" data-t="body">太阳系</div>
-      <div class="tab" data-t="const">黄道十二星座</div>
+      <div class="tnav" id="tabL" title="上一组">‹</div>
+      <div id="tabWrap">
+        <div class="tab on" data-t="body">太阳系</div>
+        <div class="tab" data-t="const">十二星座</div>
+        <div class="tab" data-t="stars">群星</div>
+      </div>
+      <div class="tnav" id="tabR" title="下一组">›</div>
     </div>
     <div class="hd" id="panelHd"><span>天体</span><span>高度 · 星等</span></div>
     <div id="rows"></div>
     <div id="rowsConst"></div>
+    <div id="rowsStars"></div>
   </div>
 
   <div class="bottom">
@@ -2461,20 +2476,25 @@ BODIES.forEach((b, i) => {
 
 /* ---- 星座清单（第二个 Tab） ---- */
 const rowsConst = document.getElementById('rowsConst');
+const rowsStars = document.getElementById('rowsStars');
+let starSectDone = false;
 const constRowEls = GROUPS.map((c, i) => {
-  if (c.kind === '星群') {           // 星群区隔开，免得被当成第 13 个黄道星座
+  const isStar = c.kind === '星群';
+  // 星群单独一节，放进「群星」tab，免得被当成第 13 个黄道星座
+  if (isStar && !starSectDone) {
+    starSectDone = true;
     const sect = document.createElement('div');
     sect.className = 'sect';
     sect.textContent = '星群 · 指北';
-    rowsConst.appendChild(sect);
+    rowsStars.appendChild(sect);
   }
   const el = document.createElement('div');
   el.className = 'row';
-  el.innerHTML = `<span class="dot" style="background:${c.kind === '星群' ? '#e8d9a6' : '#a9c6ff'};color:${c.kind === '星群' ? '#e8d9a6' : '#a9c6ff'}"></span>
+  el.innerHTML = `<span class="dot" style="background:${isStar ? '#e8d9a6' : '#a9c6ff'};color:${isStar ? '#e8d9a6' : '#a9c6ff'}"></span>
     <span class="nm">${c.cn}<small>${c.en.toUpperCase()}</small></span>
     <span class="alt">—</span><span class="mg">—</span>`;
   el.addEventListener('click', () => selectConst(i, true));
-  rowsConst.appendChild(el);
+  (isStar ? rowsStars : rowsConst).appendChild(el);
   return el;
 });
 // 「北极星」单独一行，直接定位到那颗星（它属于小熊座，不在北斗这组里）
@@ -2485,7 +2505,14 @@ const constRowEls = GROUPS.map((c, i) => {
     <span class="nm">北极星<small>POLARIS</small></span>
     <span class="alt">—</span><span class="mg">—</span>`;
   el.addEventListener('click', () => selectStar(POLARIS_STAR, true));
-  rowsConst.appendChild(el);
+  if (!starSectDone) {                    // 若 GROUPS 里没有星群，也补一节标题
+    starSectDone = true;
+    const sect = document.createElement('div');
+    sect.className = 'sect';
+    sect.textContent = '星群 · 指北';
+    rowsStars.appendChild(sect);
+  }
+  rowsStars.appendChild(el);
   constRowEls.push(el);       // 高度用北极星自己的方向算，别用北斗中心
 }
 
@@ -2494,7 +2521,7 @@ const constRowEls = GROUPS.map((c, i) => {
   const sect = document.createElement('div');
   sect.className = 'sect';
   sect.textContent = '尺度阶梯 · 光走了多久';
-  rowsConst.appendChild(sect);
+  rowsStars.appendChild(sect);
   FAMOUS.forEach((f, i) => {
     const el = document.createElement('div');
     el.className = 'row';
@@ -2503,8 +2530,8 @@ const constRowEls = GROUPS.map((c, i) => {
       <span class="nm">${f.cn}<small>${f.en.toUpperCase()} · ${f.short} 光年</small></span>`;
     el.classList.add('fam');
     el.addEventListener('click', () => {
+      ding(1120);
       showFamousCard(i);
-      placeCard(0, 0);                             // 卡片贴右上（placeCard 内按 selectedFamous 早返回）
       const r = focusFamous(i, { fly: true });
       if (r.raised && window.innerWidth > 860) {   // 手机屏上卡片已占满上方，这条提示会叠在卡片上
         const d = new Date(state.timeMs);
@@ -2513,23 +2540,42 @@ const constRowEls = GROUPS.map((c, i) => {
         toast(`${FAMOUS[i].cn} 在这个纬度永不升起，只能看卡片`);
       }
     });
-    rowsConst.appendChild(el);
+    rowsStars.appendChild(el);
   });
 }
 
 const panelHd = document.getElementById('panelHd');
+const tabWrap = document.getElementById('tabWrap');
+const PANEL_TAB_HD = {
+  body:  '<span>天体</span><span>高度 · 星等</span>',
+  const: '<span>黄道十二星座</span><span>高度 · 最亮星</span>',
+  stars: '<span>星群 · 尺度阶梯</span><span>高度 · 星等</span>',
+};
+function applyTab(name) {
+  const tabs = [...document.querySelectorAll('#tabWrap .tab')];
+  const t = tabs.find(x => x.dataset.t === name);
+  if (!t) return;
+  tabs.forEach(x => x.classList.toggle('on', x === t));
+  document.getElementById('rows').style.display = name === 'body' ? '' : 'none';
+  rowsConst.classList.toggle('show', name === 'const');
+  rowsStars.classList.toggle('show', name === 'stars');
+  panelHd.innerHTML = PANEL_TAB_HD[name] || PANEL_TAB_HD.body;
+  cLineMat.opacity = name === 'body' ? 0.16 : 0.30;   // 看星座/群星时连线提亮，看行星时退到背景
+  tabWrap.scrollLeft = Math.max(0, t.offsetLeft - tabWrap.offsetLeft - 2);   // 把当前组滑进可视区
+}
+function stepTab(d) {
+  const tabs = [...document.querySelectorAll('#tabWrap .tab')];
+  const cur = tabs.findIndex(x => x.classList.contains('on'));
+  const next = Math.min(tabs.length - 1, Math.max(0, cur + d));
+  applyTab(tabs[next].dataset.t);
+}
+document.getElementById('tabL').addEventListener('click', () => stepTab(-1));
+document.getElementById('tabR').addEventListener('click', () => stepTab(1));
 document.getElementById('tabs').addEventListener('click', (e) => {
   const t = e.target.closest('.tab');
-  if (!t) return;
-  const isConst = t.dataset.t === 'const';
-  [...document.querySelectorAll('#tabs .tab')].forEach(x => x.classList.toggle('on', x === t));
-  document.getElementById('rows').style.display = isConst ? 'none' : '';
-  rowsConst.classList.toggle('show', isConst);
-  panelHd.innerHTML = isConst
-    ? '<span>星座 · 星群</span><span>高度 · 最亮星</span>'
-    : '<span>天体</span><span>高度 · 星等</span>';
-  cLineMat.opacity = isConst ? 0.30 : 0.16;   // 看星座列表时连线提亮，看行星时退到背景
+  if (t) applyTab(t.dataset.t);
 });
+tabWrap.scrollLeft = 0;
 
 const labelEls = BODIES.map(b => {
   const el = document.createElement('div');
@@ -2662,7 +2708,7 @@ function onUp(e) {
       const fd = Math.hypot(fx - e.clientX, fy - e.clientY);
       if (fd < bfd) { bfd = fd; bf = i; }
     }
-    if (bf >= 0) { showFamousCard(bf, e.clientX, e.clientY); return; }
+    if (bf >= 0) { ding(1120); showFamousCard(bf, e.clientX, e.clientY); return; }
   }
   // 行星没命中，再找星座亮星（半径 16px，取最近）
   if (state.showConst) {
@@ -2770,7 +2816,9 @@ const clabEl = document.getElementById('clab');
 
 function placeCard(sx, sy) {
   const W = window.innerWidth, H = window.innerHeight;
-  const cw = cardEl.offsetWidth || 232, chh = cardEl.offsetHeight || 168, gapX = 22;
+  const cw = cardEl.offsetWidth || 232, chh = cardEl.offsetHeight || 168;
+  // 「尺度阶梯」那 8 个的标签挂在点位正上方、横向还铺开一段，卡片多留点间隙
+  const gapX = (selectedFamous >= 0 && W > 860) ? 74 : 22;
   // 窄屏（手机竖屏）：卡片满宽贴顶，把下面留给准星和导览条
   if (W <= 860 && (tour.on || selectedFamous >= 0)) {
     cardEl.style.left = '12px';
@@ -2783,12 +2831,6 @@ function placeCard(sx, sy) {
   if (tour.on) {
     cardEl.style.left = `${Math.max(12, W - cw - 26)}px`;
     cardEl.style.top = '118px';
-    return;
-  }
-  // 「尺度阶梯」这 8 个：卡片固定停在左侧中部 —— 右边是选择清单，中间是准星和标签，都别压
-  if (selectedFamous >= 0 && W > 860) {
-    cardEl.style.left = '26px';
-    cardEl.style.top = `${Math.max(118, Math.min(H - chh - 130, 300))}px`;
     return;
   }
   let cx = sx + gapX;
@@ -3104,10 +3146,7 @@ const tour = { on: false, idx: -1, t0: 0, paused: false, held: 0, prevFov: 0 };
 let tourPlanet = -1;
 
 function setEcl(v) { state.showEcl = v; document.getElementById('btnEcl').classList.toggle('on', v); }
-function setTab(name) {
-  const t = document.querySelector(`#tabs .tab[data-t="${name}"]`);
-  if (t && !t.classList.contains('on')) t.click();
-}
+function setTab(name) { applyTab(name); }
 function highestConst() {   // 此刻地平线上最高的星座
   const sky = skyMatrix(lstRad(state.timeMs));
   let best = 0, bestY = -9;
@@ -3164,7 +3203,7 @@ const LIGHTTOUR = FAMOUS.map((f, i) => ({
   text: FAMOUS_SAY[f.key],
   ms: 7000,
   run() {
-    setTab('const');
+    setTab('stars');
     if (state.fov > 52) setFov(52);
     showFamousCard(i);
     // 转到这颗星上：在地平线下就把钟拨到它升起的时候，然后再对准
@@ -4044,7 +4083,12 @@ setInterval(() => {
     const p = w.clone().project(camera);
     const sx = (p.x * 0.5 + 0.5) * window.innerWidth;
     const sy = (-p.y * 0.5 + 0.5) * window.innerHeight;
-    placeCard(sx, sy);
+    // 目标在地平线下（南门二）时屏幕上没有可依附的位置，卡片退回右上角
+    if (p.z < 1 && w.y / SKY_R > 0.0) placeCard(sx, sy);
+    else {
+      cardEl.style.left = `${Math.max(12, window.innerWidth - (cardEl.offsetWidth || 236) - 26)}px`;
+      cardEl.style.top = '118px';
+    }
     clabEl.style.opacity = '0';
   } else if (selectedStar >= 0) {
     const w = cWorld[selectedStar].clone();
