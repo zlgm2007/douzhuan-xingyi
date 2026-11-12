@@ -112,6 +112,24 @@
     font-family:"JetBrains Mono",monospace;font-size:13px;transition:.25s}
   #info .x:hover{color:var(--paper);background:rgba(235,231,223,.08)}
 
+  /* 演示结束的收束弹框：把星空还给人 */
+  #tourEnd{position:fixed;inset:0;z-index:26;display:flex;align-items:center;justify-content:center;
+    background:rgba(2,4,10,.42);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+    opacity:0;pointer-events:none;transition:opacity .5s var(--ease)}
+  #tourEnd.on{opacity:1;pointer-events:auto}
+  #tourEnd .box{width:min(420px,88vw);padding:26px 26px 20px;text-align:center;
+    border:1px solid rgba(235,231,223,.16);border-radius:14px;background:rgba(4,7,14,.92);
+    box-shadow:0 24px 70px rgba(0,0,0,.6);transform:translateY(6px);transition:transform .55s var(--ease)}
+  #tourEnd.on .box{transform:none}
+  #tourEnd .kick{font-family:"JetBrains Mono",monospace;font-size:9px;letter-spacing:.3em;color:var(--faint)}
+  #tourEnd h2{margin:10px 0 0;font-size:20px;font-weight:400;letter-spacing:.2em;color:var(--paper)}
+  #tourEnd p{margin:10px 0 0;font-size:11px;line-height:1.8;color:rgba(235,231,223,.62)}
+  #tourEnd .btns{display:flex;gap:10px;justify-content:center;margin-top:18px}
+  #tourEnd .btns span{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.14em;
+    padding:7px 18px;border:1px solid rgba(235,231,223,.20);border-radius:999px;color:var(--dim);
+    cursor:pointer;transition:.25s}
+  #tourEnd .btns span:hover{color:var(--paper);border-color:rgba(235,231,223,.44);background:rgba(235,231,223,.06)}
+
   /* 面板 Tab：太阳系 / 黄道十二星座 */
   #panel .tabs{display:flex;gap:4px;margin:0 6px 9px;padding-bottom:9px;border-bottom:1px solid rgba(235,231,223,.10)}
   #panel .tab{flex:1 1 0;text-align:center;font-family:"JetBrains Mono",monospace;font-size:9.5px;
@@ -344,6 +362,15 @@
   </div>
   <div class="td" id="tourText">—</div>
   <div class="track"><i id="tourProg"></i></div>
+</div>
+
+<div id="tourEnd">
+  <div class="box">
+    <div class="kick">DEMO · END</div>
+    <h2>演示结束</h2>
+    <p>星空已交还给你。<br>你可以继续拖拽转天、点清单对准某颗，或调快时间看斗转。</p>
+    <div class="btns"><span id="tourAgain">再看一遍</span><span id="tourDone">回到星野</span></div>
+  </div>
 </div>
 
 <div id="info">
@@ -2168,11 +2195,13 @@ function bestPlanet(skipMoon) {   // 此刻最高、够亮的行星（排除太�
 
 const TOUR = [
   { title: '① 黄道',
-    text: '这条淡金色斜线，是地球公转轨道面在天球上的投影。太阳一年沿着它走一圈，行星、月亮也都挤在它附近 —— 因为大家的轨道几乎在同一个平面上。',
+    audio: 'assets/tour/nar-1.mp4',
+    text: '这条淡金色的斜线，是地球公转轨道面投在天球上的影子。太阳一年沿着它走一圈；行星和月亮，也都挤在它附近 —— 因为大家的轨道，几乎落在同一个平面上。',
     run() { hideInfo(); setTab('body'); setEcl(true); setFov(72); } },
 
   { title: '② 黄道十二星座',
-    text: () => `切到「黄道十二星座」，此刻地平上最高的是${(selectedConst >= 0 && selectedConst < CONSTS.length ? CONSTS[selectedConst] : CONSTS[highestConst()]).cn}。星座是恒星在天球上的视觉组合，同一星座的星彼此往往相隔几十到上千光年，只是从地球看过去恰好挨在一起。`,
+    audio: 'assets/tour/nar-2.mp4',
+    text: '切到黄道十二星座。此刻地平线上最高的那个星座，已经把它的星连了起来。星座，只是星星在天球上的视觉组合 —— 同一个星座里的星，彼此往往相隔几十到上千光年，只不过从地球上望过去，恰好挨在一起。',
     run() {
       const i = highestConst();
       setTab('const');
@@ -2180,7 +2209,8 @@ const TOUR = [
     } },
 
   { title: '③ 行星也在黄道上',
-    text: () => `回到太阳系：${tourPlanet >= 0 ? currentEphem[tourPlanet].cn + '此刻' : '行星'}也在黄道附近。区别在于——星座是“不动”的背景，行星会走，它们是真的在天上挪位置。右下角把时间调快，就能看到行星沿黄道移动。`,
+    audio: 'assets/tour/nar-3.mp4',
+    text: '回到太阳系。行星也都在黄道附近。区别在于 —— 星座是几乎不动的背景，而行星会走，它们是真的在天上挪位置。把右下角的时间调快，就能看见行星沿着黄道移动。',
     run() {
       setTab('body');
       tourPlanet = bestPlanet(true);
@@ -2189,10 +2219,40 @@ const TOUR = [
     } },
 
   { title: '④ 岁差与蛇夫座',
-    text: '最后打开「黄道科普」：黄道、黄道带、宫≠星座、岁差，以及为什么蛇夫座是第 13 个黄道星座。',
-    ms: 14000,
+    audio: 'assets/tour/nar-4.mp4',
+    text: '最后，打开黄道科普。黄道和宫，不是一回事；岁差会让星座慢慢移位；而蛇夫座，是第十三个黄道星座。',
     run() { showInfo(); } },
 ];
+
+/* 旁白：女声、每步一段，讲完才进下一步；讲的时候把夜曲压低一档 */
+const narEl = new Audio();
+narEl.preload = 'auto';
+const narDur = TOUR.map(() => 0);
+TOUR.forEach((st, i) => {
+  if (!st.audio) return;
+  const probe = new Audio(st.audio);
+  probe.preload = 'metadata';
+  probe.addEventListener('loadedmetadata', () => { narDur[i] = probe.duration || 0; });
+});
+function narSpeak(i) {
+  const st = TOUR[i];
+  narEl.pause();
+  if (!st || !st.audio) return;
+  narEl.src = st.audio;
+  narEl.currentTime = 0;
+  const pr = narEl.play();
+  if (pr && pr.catch) pr.catch(() => {});   // 没手势（?tour=1 自动起播）就静音跑，节奏不受影响
+  if (typeof bgmDuck === 'function') bgmDuck(true);
+}
+function narStop() {
+  narEl.pause();
+  if (typeof bgmDuck === 'function') bgmDuck(false);
+}
+function stepMs(i) {
+  const st = TOUR[i];
+  if (st && st.audio && narDur[i] > 0.5) return narDur[i] * 1000 + 1600;   // 讲完留一口气
+  return (st && st.ms) || STEP_MS;
+}
 
 function tourRender() {
   const st = TOUR[tour.idx];
@@ -2217,15 +2277,31 @@ function tourStart() {
   document.getElementById('panel').style.pointerEvents = 'none';
   tourNext();
 }
+function tourEnd() {
+  // 黄道科普讲完，收尾：收弹窗、镜头回入场原点，再给一张「演示结束」的卡片
+  hideInfo();
+  hideCard();                        // 收掉最后一步留下的星卡，别在收束画面里挂着
+  tourStop(true);
+  resetView();                       // 回到入场时的取景（正北 · 抬头 16°，草原在下）
+  document.getElementById('tourEnd').classList.add('on');
+  narEl.pause();
+  narEl.src = 'assets/tour/nar-5.mp4';
+  narEl.currentTime = 0;
+  const pr = narEl.play();
+  if (pr && pr.catch) pr.catch(() => {});
+}
+
 function tourNext() {
   tour.idx++;
-  if (tour.idx >= TOUR.length) { tourStop(true); return; }
+  if (tour.idx >= TOUR.length) { tourEnd(); return; }
   TOUR[tour.idx].run();
+  narSpeak(tour.idx);
   tour.t0 = performance.now();
   tourRender();
 }
 function tourStop(keep) {
   tour.on = false;
+  narStop();
   tourbar.classList.remove('on');
   tourTitle.textContent = '—';
   if (!keep) hideInfo();          // 手动退出：一并收起弹窗；自然播完则留在屏幕上
@@ -2238,7 +2314,7 @@ function tourTick(now) {
   if (!tour.on) return;
   if (tour.paused) return;
   const t = now - tour.t0;
-  const ms = TOUR[tour.idx].ms || STEP_MS;
+  const ms = stepMs(tour.idx);
   tourProg.style.width = `${Math.min(100, (t / ms) * 100).toFixed(1)}%`;
   if (t >= ms) tourNext();
 }
@@ -2250,11 +2326,19 @@ document.getElementById('btnTour').addEventListener('click', () => {
 document.getElementById('tourPause').addEventListener('click', (e) => {
   if (!tour.on) return;
   tour.paused = !tour.paused;
-  if (tour.paused) { tour.held = performance.now() - tour.t0; }
-  else { tour.t0 = performance.now() - tour.held; }
+  if (tour.paused) { tour.held = performance.now() - tour.t0; narEl.pause(); }
+  else { tour.t0 = performance.now() - tour.held; narEl.play().catch(() => {}); }
   e.currentTarget.textContent = tour.paused ? '继续' : '暂停';
 });
 document.getElementById('tourExit').addEventListener('click', () => tourStop(false));
+document.getElementById('tourDone').addEventListener('click', () => {
+  document.getElementById('tourEnd').classList.remove('on');
+});
+document.getElementById('tourAgain').addEventListener('click', () => {
+  document.getElementById('tourEnd').classList.remove('on');
+  document.getElementById('btnTour').classList.add('on');
+  tourStart();
+});
 
 function applyConstVisual() {
   document.getElementById('btnConst').classList.toggle('on', state.showConst);
@@ -2395,6 +2479,15 @@ function bgmFadeTo(target, ms = 2600) {
     bgmEl.volume = Math.max(0, Math.min(1, from + (target - from) * e));
     if (k >= 1) { clearInterval(bgmFadeTimer); bgmEl.volume = target; }
   }, 50);
+}
+
+/* 旁白说话时把夜曲压低，讲完再抬回来 */
+let bgmDucked = false;
+function bgmDuck(on) {
+  if (!bgmEl) return;
+  bgmDucked = on;
+  if (bgmEl.paused) return;
+  bgmFadeTo(on ? Math.min(0.10, BGM_VOL) : BGM_VOL, on ? 600 : 1800);
 }
 
 function bgmStart() {
