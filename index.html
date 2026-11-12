@@ -172,6 +172,8 @@
     padding:5px 9px;border:1px solid transparent;border-radius:4px;cursor:pointer;transition:.3s}
   .speed .s:hover{color:var(--paper)}
   .speed .s.on{color:var(--paper);border-color:var(--line);background:rgba(235,231,223,.07)}
+  .speed .s.reset{margin-left:6px;padding-left:11px;border-left:1px solid var(--line);border-radius:0 4px 4px 0}
+  .speed .s.reset:hover{color:var(--paper);background:rgba(235,231,223,.06)}
 
   /* 天体标签 */
   #labels{position:fixed;inset:0;z-index:12;pointer-events:none}
@@ -318,6 +320,7 @@
       <div class="s on" data-k="1">1×</div>
       <div class="s" data-k="60">60×</div>
       <div class="s" data-k="3600">1 时/秒</div>
+      <div class="s reset" id="btnReset" title="回到入场时抬望眼的位置">还原</div>
     </div>
   </div>
 
@@ -2292,6 +2295,10 @@ function applySpeedVisual() {
 document.getElementById('speed').addEventListener('click', (e) => {
   const t = e.target.closest('.s');
   if (!t) return;
+  if (t.id === 'btnReset') {
+    resetView();
+    return;
+  }
   if (t.id === 'btnPause') {
     // 一个按钮两种状态：跑着就暂停，停着就开始（回到暂停前的倍速）
     if (state.speed > 0) { state.lastSpeed = state.speed; state.speed = 0; }
@@ -2302,6 +2309,15 @@ document.getElementById('speed').addEventListener('click', (e) => {
   applySpeedVisual();
 });
 applySpeedVisual();
+
+/* --------------------------------------------------------- 视角还原 */
+/* "最初的位置" = 入场落地那一刻的取景：正北、略微抬头，地平线和草原留在画面下方 */
+const VIEW_HOME = { yaw: 0, pitch: 0.28 };
+function resetView() {
+  state.focus = { yaw: VIEW_HOME.yaw, pitch: VIEW_HOME.pitch };
+  state.velocity = 0;
+  toast('已还原到入场时的取景（正北 · 抬头 16°）');
+}
 
 /* ----------------------------------------------------- 对准某颗天体 */
 function focusBody(i) {
