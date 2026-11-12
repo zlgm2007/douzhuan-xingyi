@@ -152,6 +152,8 @@
     font-size:9.5px;letter-spacing:.04em;color:rgba(235,231,223,.60);font-family:"JetBrains Mono",monospace}
   #sunHud .stats b{font-weight:400;color:rgba(255,238,214,.94)}
   #sunHud .note{margin-top:13px;font-size:10.5px;line-height:1.78;color:rgba(235,231,223,.55);max-width:340px}
+  #sunHud .src{margin-top:10px;font-family:"JetBrains Mono",monospace;font-size:8px;letter-spacing:.14em;
+    color:rgba(235,231,223,.30)}
 
   /* 面板 Tab：太阳系 / 黄道十二星座 */
   #panel .tabs{display:flex;gap:4px;margin:0 6px 9px;padding-bottom:9px;border-bottom:1px solid rgba(235,231,223,.10)}
@@ -237,6 +239,12 @@
   #card::-webkit-scrollbar-track{background:transparent}
   #card .ch{display:flex;align-items:baseline;gap:8px;min-width:0}
   #card .ch i{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:1px}
+  #card .go{margin-top:11px;display:flex;align-items:center;justify-content:center;gap:6px;
+    padding:7px 10px;border:1px solid rgba(235,231,223,.22);border-radius:8px;cursor:pointer;
+    font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.18em;color:rgba(235,231,223,.72);
+    background:rgba(235,231,223,.035);transition:.22s}
+  #card .go:hover{color:var(--paper);border-color:rgba(235,231,223,.46);background:rgba(235,231,223,.10)}
+  #card .go i{font-style:normal;font-size:12px;line-height:1}
   #card .ch b{font-size:15px;font-weight:400;letter-spacing:.12em;color:var(--paper);
     flex:0 0 auto;white-space:nowrap}
   #card .ch em{font-style:normal;font-family:"JetBrains Mono",monospace;font-size:8.5px;
@@ -391,17 +399,12 @@
 <div id="sunHud">
   <div class="back" id="sunBack"><i>‹</i>返回星野</div>
   <div class="meta">
-    <div class="kick">SOL · G2V · 46 亿年</div>
-    <h2>太阳</h2>
-    <div class="en">THE SUN</div>
-    <div class="stats">
-      <span>直径</span><b>1,392,700 km · 109 个地球</b>
-      <span>质量</span><b>占太阳系 99.86%</b>
-      <span>表面温度</span><b>约 5,500 ℃</b>
-      <span>核心温度</span><b>约 1,500 万 ℃</b>
-      <span>距地</span><b>1.496 亿 km · 光走 8 分 20 秒</span>
-    </div>
-    <div class="note">每秒约 6 亿吨氢聚变成氦，质量以光和热的形式向外辐射。你看到的这层「火」，是 5,500 ℃ 的等离子体在对流翻滚。</div>
+    <div class="kick" id="shKick">SOL · G2V · 46 亿年</div>
+    <h2 id="shTitle">太阳</h2>
+    <div class="en" id="shEn">THE SUN</div>
+    <div class="stats" id="shStats"></div>
+    <div class="note" id="shNote"></div>
+    <div class="src" id="shSrc"></div>
   </div>
 </div>
 
@@ -452,7 +455,8 @@
 <div id="card"><div class="ch"><i id="cardDot"></i><b id="cardName">—</b><em id="cardEn">—</em></div>
   <div class="mt"><span id="cardDia">—</span><span id="cardDist">—</span></div>
   <p id="cardDesc">—</p>
-  <div class="note hide" id="cardNote"></div></div>
+  <div class="note hide" id="cardNote"></div>
+  <div class="go" id="cardGo"><i>◎</i>查看细节</div></div>
 
 <script>
   // 普通 script 里装错误钩子：模块语法错误也能显示出来
@@ -1106,10 +1110,10 @@ composer.addPass(new OutputPass());
  * 云团级的米粒组织 + 临边昏暗 + 外圈日冕，全部在片元里算，
  * 1 个球 + 1 张日冕片，没有贴图，也没有第二条后期链（复用同一个 composer）。
  */
-const sunScene = new THREE.Scene();
-const sunCam = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 120);
+const viewScene = new THREE.Scene();
+const viewCam = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 120);
 const SUN_DIST = 2.55;
-sunCam.position.set(0, 0, SUN_DIST);
+viewCam.position.set(0, 0, SUN_DIST);
 
 const sunUni = { uTime: { value: 0 }, uPulse: { value: 1 } };
 
@@ -1176,7 +1180,7 @@ const sunMesh = new THREE.Mesh(
       }`,
   })
 );
-sunScene.add(sunMesh);
+viewScene.add(sunMesh);
 
 const coronaMat = new THREE.ShaderMaterial({
   uniforms: { uTime: sunUni.uTime },
@@ -1211,92 +1215,294 @@ const coronaMat = new THREE.ShaderMaterial({
 });
 const sunCorona = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), coronaMat);
 sunCorona.frustumCulled = false;
-sunScene.add(sunCorona);
+viewScene.add(sunCorona);
+
+/* --------------------------------------------- 打算细看的九颗：参数与实数 */
+/*
+ * 特写里的参数全部有出处：
+ *   直径 / 距日 / 自转 / 倾角 / 温度 / 卫星数 —— NASA NSSDCA Planetary Fact Sheet（2025-03 更新）
+ *   表面反照图 —— Solar System Scope（CC BY 4.0，要求署名，见每张 HUD 的 src 行）
+ * dist 是以"行星半径 = 1"为单位的相机距离，只影响构图（球都按半径 1 建模）。
+ */
+const PLANET_VIEWS = {
+  sun: { proc: true, kick:'SOL · G2V · 46 亿年', title:'太阳', en:'THE SUN', dist:2.55, fov:50,
+    stats:[['直径','1,392,700 km · 109 个地球'],['质量','占太阳系 99.86%'],['表面温度','约 5,500 ℃'],
+           ['核心温度','约 1,500 万 ℃'],['距地','1.496 亿 km · 光走 8 分 20 秒']],
+    note:'每秒约 6 亿吨氢聚变成氦，质量以光和热的形式向外辐射。你看到的这层「火」，是 5,500 ℃ 的等离子体在对流翻滚。' },
+
+  moon: { map:'assets/planets/moon.jpg', tint:[1.0,0.99,0.96], atm:[0,0,0], atmK:0, obl:6.7, rot:655.7, rot0:-Math.PI/2, dist:2.75,
+    kick:'MOON · 地球唯一天然卫星', title:'月亮', en:'THE MOON',
+    stats:[['直径','3,475 km · 地球的 0.27 倍'],['距地','384,400 km · 光走 1.28 秒'],
+           ['自转','27.32 天（与公转同步）'],['温差','-173 ℃ ~ 127 ℃'],['大气','几乎没有']],
+    note:'同一面永远朝向地球——自转与公转严格同步（潮汐锁定），所以站在地面永远看不到它的背面。那些暗色"海"是古老的玄武岩熔岩平原。' },
+
+  mercury: { map:'assets/planets/mercury.jpg', tint:[1.0,0.98,0.95], atm:[0,0,0], atmK:0, obl:0.03, rot:1407.6, dist:2.75,
+    kick:'MERCURY · 0.39 AU', title:'水星', en:'MERCURY',
+    stats:[['直径','4,879 km · 地球的 0.38 倍'],['距日','5,790 万 km'],['自转','58.6 天'],
+           ['温差','-173 ℃ ~ 427 ℃'],['卫星','0 颗']],
+    note:'它的一天比一年还长：太阳日约 176 个地球日，公转一圈只要 88 天。几乎没有大气保温，昼夜落差超过 600 ℃。' },
+
+  venus: { map:'assets/planets/venus_atmosphere.jpg', tint:[1.02,0.95,0.82], atm:[1.0,0.86,0.52], atmK:0.28, obl:177.4, rot:-5832.5, dist:2.8,
+    kick:'VENUS · 0.72 AU', title:'金星', en:'VENUS',
+    stats:[['直径','12,104 km · 地球的 0.95 倍'],['距日','1.082 亿 km'],['自转','243 天（逆行）'],
+           ['表面温度','约 464 ℃'],['气压','92 bar · 96.5% 二氧化碳']],
+    note:'你看到的不是地面，是终年不散的浓硫酸云顶。失控温室效应把地表烤到 464 ℃，比更靠近太阳的水星还热。它自转方向与公转相反。' },
+
+  mars: { map:'assets/planets/mars.jpg', tint:[1.02,0.94,0.88], atm:[0.9,0.52,0.30], atmK:0.10, obl:25.2, rot:24.6, dist:2.75,
+    kick:'MARS · 1.52 AU', title:'火星', en:'MARS',
+    stats:[['直径','6,792 km · 地球的 0.53 倍'],['距日','2.28 亿 km'],['自转','24.6 小时'],
+           ['温度','-125 ℃ ~ 20 ℃'],['卫星','2 颗']],
+    note:'红色来自土壤里的氧化铁。太阳系最高的火山奥林匹斯山在这里，高 21.9 km，是珠峰的 2.4 倍；大气密度只有地球的 0.6%。' },
+
+  jupiter: { map:'assets/planets/jupiter.jpg', tint:[1.04,1.0,0.96], atm:[0.88,0.74,0.52], atmK:0.12, obl:3.1, rot:9.9, dist:3.0,
+    kick:'JUPITER · 5.2 AU', title:'木星', en:'JUPITER',
+    stats:[['直径','142,984 km · 地球的 11.2 倍'],['距日','7.785 亿 km'],['自转','9.9 小时（最快）'],
+           ['云顶温度','约 -110 ℃'],['卫星','95 颗']],
+    note:'没有固体表面——你看到的是氨冰与硫氢化铵的云顶，条纹是不同纬度的高速气流。大红斑是一场至少刮了 190 年的反气旋，宽度能塞下 2~3 个地球。' },
+
+  saturn: { map:'assets/planets/saturn.jpg', tint:[1.05,1.0,0.92], atm:[0.95,0.84,0.60], atmK:0.10, obl:26.7, rot:10.7, dist:4.9, ring:true,
+    kick:'SATURN · 9.58 AU', title:'土星', en:'SATURN',
+    stats:[['直径','120,536 km · 地球的 9.4 倍'],['距日','14.32 亿 km'],['自转','10.7 小时'],
+           ['云顶温度','约 -140 ℃'],['卫星','274 颗（已知最多）']],
+    note:'主环从内侧 7 万 km 铺到 13.6 万 km，由亿万个水冰颗粒组成，主体厚度大多不足 10 米。环缝是土卫的引力清出来的。平均密度只有 0.69 g/cm³，比水轻。' },
+
+  uranus: { map:'assets/planets/uranus.jpg', tint:[0.98,1.02,1.04], atm:[0.55,0.88,0.98], atmK:0.22, obl:97.8, rot:-17.2, dist:2.85,
+    kick:'URANUS · 19.2 AU', title:'天王星', en:'URANUS',
+    stats:[['直径','51,118 km · 地球的 4.0 倍'],['距日','28.67 亿 km'],['自转','17.2 小时（逆行）'],
+           ['温度','约 -195 ℃'],['转轴倾角','97.8°（躺着转）']],
+    note:'96% 是氢与氦，甲烷吸收了红光，剩下青蓝。它的自转轴几乎躺在轨道面上，于是一年里有一半时间是极昼、一半是极夜——这是太阳系唯一的"侧滚"行星。' },
+
+  neptune: { map:'assets/planets/neptune.jpg', tint:[0.94,0.98,1.06], atm:[0.38,0.62,1.0], atmK:0.22, obl:28.3, rot:16.1, dist:2.85,
+    kick:'NEPTUNE · 30.1 AU', title:'海王星', en:'NEPTUNE',
+    stats:[['直径','49,528 km · 地球的 3.9 倍'],['距日','45.15 亿 km'],['自转','16.1 小时'],
+           ['温度','约 -200 ℃'],['风速','可达 2,100 km/h']],
+    note:'太阳系最猛的风在这里。它是唯一一颗先用数学推算位置、再被望远镜找到的行星——1846 年，勒维耶算出它该在哪里，伽勒当晚就看到了。' },
+};
+
+const SRC_TEX = '纹理 Solar System Scope · CC BY 4.0 ｜ 数据 NASA NSSDCA（2025-03）';
+const SRC_NASA = '数据 NASA NSSDCA Planetary Fact Sheet（2025-03）';
+
+/* 一套通用材质：等距圆柱反照图 + 固定方向的主光 + 边缘大气散射 */
+const planetGroup = new THREE.Group();
+planetGroup.visible = false;
+viewScene.add(planetGroup);
+
+const planetMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(1, 96, 64),
+  new THREE.MeshBasicMaterial({ color: 0x101014 })
+);
+planetGroup.add(planetMesh);
+
+const VIEW_LIGHT = new THREE.Vector3(-0.74, 0.34, 0.58).normalize();   // 视图空间主光（左上侧光，留出晨昏线）
+
+const planetMats = {};
+function planetMaterial(key) {
+  if (planetMats[key]) return planetMats[key];
+  const cfg = PLANET_VIEWS[key];
+  const tex = new THREE.TextureLoader().load(cfg.map);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  planetMats[key] = new THREE.ShaderMaterial({
+    uniforms: {
+      uMap: { value: tex },
+      uLight: { value: VIEW_LIGHT },
+      uTint: { value: new THREE.Vector3().fromArray(cfg.tint || [1, 1, 1]) },
+      uAtm: { value: new THREE.Vector3().fromArray(cfg.atm || [0, 0, 0]) },
+      uAtmK: { value: cfg.atmK || 0 },
+    },
+    vertexShader: /* glsl */`
+      varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main(){
+        vUv = uv;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vN = normalize(normalMatrix * normal);
+        vV = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */`
+      precision highp float;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      uniform sampler2D uMap; uniform vec3 uLight; uniform vec3 uTint; uniform vec3 uAtm; uniform float uAtmK;
+      void main(){
+        vec3 base = texture2D(uMap, vUv).rgb * uTint;
+        float ndl = dot(normalize(vN), normalize(uLight));
+        float lit = smoothstep(-0.06, 0.30, ndl);          // 晨昏线要看得见，但别硬切
+        float mu = clamp(dot(normalize(vN), normalize(vV)), 0.0, 1.0);
+        vec3 col = base * (0.010 + 0.99 * lit) * mix(0.58, 1.0, pow(mu, 0.55)) * 0.82;   // 压一档曝光，别让球糊成白
+        col += uAtm * pow(1.0 - mu, 5.5) * lit * uAtmK;    // 只在被照亮的那一侧有大气亮边
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+  });
+  return planetMats[key];
+}
+
+/* 土星环：真实内外径（1.24 – 2.27 个行星半径），按半径采样，并让行星挡住阳光 */
+const ringTex = new THREE.TextureLoader().load('assets/planets/saturn-ring.png');
+ringTex.colorSpace = THREE.SRGBColorSpace;
+ringTex.generateMipmaps = false;
+ringTex.minFilter = THREE.LinearFilter;
+ringTex.magFilter = THREE.LinearFilter;
+ringTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+const RING_IN = 1.24, RING_OUT = 2.27;
+const ringMesh = new THREE.Mesh(
+  new THREE.RingGeometry(RING_IN, RING_OUT, 240, 1),
+  new THREE.ShaderMaterial({
+    uniforms: { uRing: { value: ringTex }, uLight: { value: VIEW_LIGHT }, uIn: { value: RING_IN }, uOut: { value: RING_OUT } },
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    vertexShader: /* glsl */`
+      varying vec2 vLocal; varying vec3 vP; varying vec3 vNw;
+      void main(){
+        vLocal = position.xy;
+        vNw = normalize((modelMatrix * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vP = mv.xyz;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */`
+      precision highp float;
+      varying vec2 vLocal; varying vec3 vP; varying vec3 vNw;
+      uniform sampler2D uRing; uniform vec3 uLight; uniform float uIn; uniform float uOut;
+      void main(){
+        float r = length(vLocal);
+        float t = (r - uIn) / (uOut - uIn);
+        if (t < -0.001 || t > 1.001) discard;
+        vec4 ring = texture2D(uRing, vec2(clamp(t, 0.0, 1.0), 0.5));
+        if (ring.a < 0.02) discard;
+        float sh = 0.52 + 0.48 * abs(dot(vNw, uLight));      // 环面朝向大致决定明暗
+        // 行星阴影：落在球的后侧且离光轴不到一个半径 → 被挡住（边缘给软过渡，不切硬边）
+        float sd = dot(vP, uLight);
+        if (sd < 0.0) {
+          vec3 perp = vP - uLight * sd;
+          sh *= mix(0.34, 1.0, smoothstep(0.90, 1.30, length(perp)));
+        }
+        gl_FragColor = vec4(ring.rgb * sh * 1.10, ring.a);
+      }`,
+  })
+);
+ringMesh.rotation.x = -(Math.PI / 2 - 26.7 * Math.PI / 180);   // 环面与视线夹角 ≈ 真实倾角
+ringMesh.visible = false;
+planetGroup.add(ringMesh);
+
+/* 特写 HUD 按 key 填字 */
+function fillViewHud(key) {
+  const c = PLANET_VIEWS[key];
+  const $ = (id) => document.getElementById(id);
+  $('shKick').textContent = c.kick;
+  $('shTitle').textContent = c.title;
+  $('shEn').textContent = c.en;
+  $('shStats').innerHTML = c.stats.map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join('');
+  $('shNote').textContent = c.note;
+  $('shSrc').textContent = c.proc ? SRC_NASA : SRC_TEX;
+}
 
 /* 过渡：先让星光糊成径向流，闪一下白，再露出这颗星；返回时反过来 */
-const SUNC = { on: false, phase: 'idle', t0: 0, yaw: 0, pitch: 0, drag: false, lastX: 0, lastY: 0 };
+const VIEWC = { on: false, phase: 'idle', t0: 0, spinT0: 0, key: 'sun', dist: 2.55, yaw: 0, pitch: 0, drag: false, lastX: 0, lastY: 0 };
 const IN_MS = 1500, OUT_MS = 1300;
 const sunFlashEl = document.getElementById('sunFlash');
 const easek = (t) => t * t * (3 - 2 * t);
 
-function sunUpdate(now) {
+function viewUpdate(now) {
   const sec = now * 0.001;
+  const cfg = PLANET_VIEWS[VIEWC.key] || PLANET_VIEWS.sun;
   sunUni.uTime.value = sec;
   sunUni.uPulse.value = 1.0 + 0.045 * Math.sin(sec * 2.3) + 0.02 * Math.sin(sec * 7.1);
-  const cp = Math.cos(SUNC.pitch);
-  sunCam.position.set(SUN_DIST * Math.sin(SUNC.yaw) * cp, SUN_DIST * Math.sin(SUNC.pitch), SUN_DIST * Math.cos(SUNC.yaw) * cp);
-  sunCam.lookAt(0, 0, 0);
+  const cp = Math.cos(VIEWC.pitch);
+  viewCam.position.set(VIEWC.dist * Math.sin(VIEWC.yaw) * cp, VIEWC.dist * Math.sin(VIEWC.pitch), VIEWC.dist * Math.cos(VIEWC.yaw) * cp);
+  viewCam.lookAt(0, 0, 0);
   // 日冕片永远挡在球后面且正对相机
-  sunCorona.position.set(0, 0, 0).addScaledVector(new THREE.Vector3().subVectors(new THREE.Vector3(0, 0, 0), sunCam.position).normalize(), 1.45);
-  sunCorona.quaternion.copy(sunCam.quaternion);
+  sunCorona.position.set(0, 0, 0).addScaledVector(new THREE.Vector3().subVectors(new THREE.Vector3(0, 0, 0), viewCam.position).normalize(), 1.45);
+  sunCorona.quaternion.copy(viewCam.quaternion);
+  // 行星自转：按真实自转周期的同一比例放慢（逆行取负号），一分钟左右转一圈才有得看
+  if (!cfg.proc && cfg.rot) {
+    // 从进入的那一刻起算，别拿页面启动时间当相位（否则每次进来朝向都不一样）
+    const el = (now - VIEWC.spinT0) * 0.001;
+    planetMesh.rotation.y = (cfg.rot0 || 0) + el * (2 * Math.PI / (cfg.rot * 3600)) * 900;
+  }
 }
 
-function enterSun() {
-  if (SUNC.phase === 'in' || SUNC.on) return;
+function enterView(key) {
+  if (VIEWC.phase === 'in' || VIEWC.on) return;
+  const cfg = PLANET_VIEWS[key];
+  if (!cfg) return;
   if (tour.on) tourStop(true);
   hideInfo();
-  SUNC.yaw = 0; SUNC.pitch = 0;
-  sunCam.fov = 55; sunCam.updateProjectionMatrix();
-  // 把径向模糊的中心挪到太阳在屏上的位置：才像"朝着它飞"，而不是原地打转
-  const wSun = bodyWorld[0];
-  if (wSun) {
-    const pr = wSun.clone().project(camera);
+  VIEWC.key = key; VIEWC.yaw = 0; VIEWC.pitch = 0;
+  VIEWC.dist = cfg.dist || 2.55;
+  viewCam.fov = cfg.fov || 50;
+  viewCam.updateProjectionMatrix();
+  // 换外观：太阳走程序化球 + 日冕，其余走反照图球（土星多一张环）
+  sunMesh.visible = !!cfg.proc;
+  sunCorona.visible = !!cfg.proc;
+  planetGroup.visible = !cfg.proc;
+  if (!cfg.proc) {
+    planetMesh.material = planetMaterial(key);
+    planetMesh.rotation.y = cfg.rot0 || 0;   // 有些贴图的 0° 经度不在正面，按需先转
+    VIEWC.spinT0 = performance.now();
+    ringMesh.visible = !!cfg.ring;
+  }
+  fillViewHud(key);
+  // 把径向模糊的中心挪到这颗星在屏上的位置：才像"朝着它飞"，而不是原地打转
+  const idx = BODIES.findIndex((b) => b.key === key);
+  const w = idx >= 0 ? bodyWorld[idx] : null;
+  if (w) {
+    const pr = w.clone().project(camera);
     if (pr.z < 1) warpPass.uniforms.uCenter.value.set(pr.x * 0.5 + 0.5, pr.y * 0.5 + 0.5);
   }
   document.body.classList.add('sunwarp');     // 穿梭一开始主角 HUD 就让位
-  SUNC.phase = 'in'; SUNC.t0 = performance.now();
+  VIEWC.phase = 'in'; VIEWC.t0 = performance.now();
 }
-function exitSun() {
-  if (!SUNC.on || SUNC.phase === 'out') return;
-  SUNC.phase = 'out'; SUNC.t0 = performance.now();
+function exitView() {
+  if (!VIEWC.on || VIEWC.phase === 'out') return;
+  VIEWC.phase = 'out'; VIEWC.t0 = performance.now();
 }
-document.getElementById('sunBack').addEventListener('click', exitSun);
+document.getElementById('sunBack').addEventListener('click', exitView);
 
 function sunViewTick(now) {
-  if (SUNC.phase === 'idle') return false;
-  const k = now - SUNC.t0;
+  if (VIEWC.phase === 'idle') return false;
+  const k = now - VIEWC.t0;
 
-  if (SUNC.phase === 'in') {
+  if (VIEWC.phase === 'in') {
     const t = Math.min(1, k / IN_MS);
     if (t < 0.50) { WARP.value = easek(t / 0.50); sunFlashEl.style.opacity = '0'; }
     else if (t < 0.62) {
       WARP.value = 1.0;
       sunFlashEl.style.opacity = String((t - 0.50) / 0.12);
     } else {
-      if (!SUNC.on) {                       // 白光最亮的那一帧换场景，看不出切
-        renderPass.scene = sunScene; renderPass.camera = sunCam;
+      if (!VIEWC.on) {                       // 白光最亮的那一帧换场景，看不出切
+        renderPass.scene = viewScene; renderPass.camera = viewCam;
         document.body.classList.remove('sunwarp');
         document.body.classList.add('suncam');
-        SUNC.on = true;
+        VIEWC.on = true;
         WARP.value = 0;
-        bloom.strength = 0.62; bloom.radius = 0.48; bloom.threshold = 0.66;
+        if (PLANET_VIEWS[VIEWC.key].proc) { bloom.strength = 0.62; bloom.radius = 0.48; bloom.threshold = 0.66; }
+        else { bloom.strength = 0.30; bloom.radius = 0.40; bloom.threshold = 0.92; }
       }
       sunFlashEl.style.opacity = String(Math.max(0, 1 - (t - 0.62) / 0.38));
     }
-    if (t >= 1) { SUNC.phase = 'sun'; sunFlashEl.style.opacity = '0'; }
-    sunUpdate(now);
+    if (t >= 1) { VIEWC.phase = 'sun'; sunFlashEl.style.opacity = '0'; }
+    viewUpdate(now);
     composer.render();
     return true;
   }
 
-  if (SUNC.phase === 'sun') { sunUpdate(now); composer.render(); return true; }
+  if (VIEWC.phase === 'sun') { viewUpdate(now); composer.render(); return true; }
 
   // out
   const t = Math.min(1, k / OUT_MS);
   sunFlashEl.style.opacity = String(t < 0.20 ? t / 0.20 : Math.max(0, 1 - (t - 0.20) / 0.80));
-  if (t > 0.20 && SUNC.on) {
+  if (t > 0.20 && VIEWC.on) {
     renderPass.scene = scene; renderPass.camera = camera;
     document.body.classList.remove('suncam');
     document.body.classList.add('sunwarp');   // 回去的路上 HUD 也先别弹出来
-    SUNC.on = false;
+    VIEWC.on = false;
     bloom.strength = 0.70; bloom.radius = 0.55; bloom.threshold = 0.22;
     setFov(state.fov);                        // 回来时把视场收束到当前值
   }
   if (t > 0.20) WARP.value = 0.85 * (1 - (t - 0.20) / 0.80);
-  sunUpdate(now);
+  viewUpdate(now);
   composer.render();
   if (t >= 1) {
-    SUNC.phase = 'idle'; WARP.value = 0; sunFlashEl.style.opacity = '0';
+    VIEWC.phase = 'idle'; WARP.value = 0; sunFlashEl.style.opacity = '0';
     warpPass.uniforms.uCenter.value.set(0.5, 0.52);   // 交还给入场电影的默认中心
     document.body.classList.remove('sunwarp');
   }
@@ -2075,7 +2281,7 @@ let downX = 0, downY = 0, downT = 0;
 
 function onDown(e) {
   if (!booted) return;
-  if (SUNC.on) { SUNC.drag = true; SUNC.lastX = e.clientX; SUNC.lastY = e.clientY; return; }
+  if (VIEWC.on) { VIEWC.drag = true; VIEWC.lastX = e.clientX; VIEWC.lastY = e.clientY; return; }
   // 入场镜头期间：任何按下都是"跳过"，不接管视角
   if (CINE.active) { cineSkip(); return; }
   // 控件上的按下不算拖拽（滑杆、按钮、清单行都要能正常操作）
@@ -2086,12 +2292,12 @@ function onDown(e) {
   downX = e.clientX; downY = e.clientY; downT = performance.now();
 }
 function onMove(e) {
-  if (SUNC.on) {
-    if (!SUNC.drag) return;
-    const dx = e.clientX - SUNC.lastX, dy = e.clientY - SUNC.lastY;
-    SUNC.lastX = e.clientX; SUNC.lastY = e.clientY;
-    SUNC.yaw = Math.max(-0.55, Math.min(0.55, SUNC.yaw - dx * 0.0035));
-    SUNC.pitch = Math.max(-0.42, Math.min(0.42, SUNC.pitch - dy * 0.0030));
+  if (VIEWC.on) {
+    if (!VIEWC.drag) return;
+    const dx = e.clientX - VIEWC.lastX, dy = e.clientY - VIEWC.lastY;
+    VIEWC.lastX = e.clientX; VIEWC.lastY = e.clientY;
+    VIEWC.yaw = Math.max(-0.55, Math.min(0.55, VIEWC.yaw - dx * 0.0035));
+    VIEWC.pitch = Math.max(-0.42, Math.min(0.42, VIEWC.pitch - dy * 0.0030));
     return;
   }
   if (!state.dragging) return;
@@ -2106,7 +2312,7 @@ function onMove(e) {
   state.pitch = Math.max(-0.30, Math.min(0.88, state.pitch + dy * pitchK));
 }
 function onUp(e) {
-  if (SUNC.on) { SUNC.drag = false; return; }
+  if (VIEWC.on) { VIEWC.drag = false; return; }
   const wasDragging = state.dragging;
   state.dragging = false;
   if (!wasDragging || !booted) return;
@@ -2153,11 +2359,11 @@ function setFov(v) {
   state.zoomAt = performance.now();
 }
 window.addEventListener('wheel', (e) => {
-  if (SUNC.on) {
+  if (VIEWC.on) {
     e.preventDefault();
     const dy = Math.max(-240, Math.min(240, e.deltaY));
-    sunCam.fov = Math.max(24, Math.min(78, sunCam.fov * Math.exp(dy * 0.0018)));
-    sunCam.updateProjectionMatrix();
+    viewCam.fov = Math.max(24, Math.min(78, viewCam.fov * Math.exp(dy * 0.0018)));
+    viewCam.updateProjectionMatrix();
     return;
   }
   if (!booted || CINE.active) return;
@@ -2274,6 +2480,7 @@ function showCard(i) {
   document.getElementById('cardDist').textContent =
     km < 2e6 ? `距地 ${(km / 10000).toFixed(1)} 万 km` : `距地 ${(km / 1e8).toFixed(2)} 亿 km`;
   document.getElementById('cardDesc').textContent = b.desc;
+  document.getElementById('cardGo').dataset.key = b.key;   // 这张卡对应的特写
   cardEl.classList.add('on');
 }
 
@@ -2292,9 +2499,17 @@ function selectBody(i, doFocus) {
   ding(1046 - Math.min(420, BODIES[i].size * 16));
   showCard(i);
   if (doFocus) focusBody(i);     // 只有从清单里点才算"对准"，直接在星空里点是原地弹出卡片
-  // 太阳单独有"特写场景"：点它就星光穿梭进去，不是只弹一张文字卡
-  if (BODIES[i].key === 'sun') enterSun();
+  // 点天体只出卡片；要看细节得再点卡片上的「查看细节」进特写（见 cardGo 的绑定）
 }
+
+// 卡片上的「查看细节」：先关卡片，再走那段星光穿梭进入这颗星的独立场景
+document.getElementById('cardGo').addEventListener('click', (ev) => {
+  ev.stopPropagation();
+  const key = document.getElementById('cardGo').dataset.key;
+  if (!key || !PLANET_VIEWS[key]) return;
+  hideCard();
+  enterView(key);
+});
 
 function constellationOf(starIdx) {
   for (let i = 0; i < cRange.length; i++) {
@@ -2400,7 +2615,7 @@ window.addEventListener('keydown', (e) => {
   if (!booted) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); enterNight(); } return; }
   const k = e.key.toLowerCase();
   if (k === 'escape') {
-    if (SUNC.on || SUNC.phase === 'in') { exitSun(); return; }
+    if (VIEWC.on || VIEWC.phase === 'in') { exitView(); return; }
     hideCard(); hideInfo(); if (tour.on) tourStop();
   }
   if (k === 'l') { state.showLabels = !state.showLabels; document.getElementById('btnLabel').classList.toggle('on', state.showLabels); }
@@ -3198,8 +3413,8 @@ document.getElementById('boot').addEventListener('click', enterNight);
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h);
-  sunCam.aspect = w / h;
-  sunCam.updateProjectionMatrix();
+  viewCam.aspect = w / h;
+  viewCam.updateProjectionMatrix();
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   composer?.setSize?.(w, h);
