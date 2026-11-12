@@ -130,6 +130,29 @@
     cursor:pointer;transition:.25s}
   #tourEnd .btns span:hover{color:var(--paper);border-color:rgba(235,231,223,.44);background:rgba(235,231,223,.06)}
 
+  /* 太阳特写：另一台相机、另一个场景；HUD 让位给这颗星 */
+  #sunFlash{position:fixed;inset:0;z-index:27;pointer-events:none;opacity:0;
+    background:radial-gradient(circle at 50% 50%,#fff 0%,#ffd9a8 46%,#ff9436 100%)}
+  #sunHud{position:fixed;inset:0;z-index:18;pointer-events:none;opacity:0;
+    transition:opacity .7s var(--ease)}
+  body.suncam #sunHud{opacity:1}
+  body.sunwarp #hud,body.sunwarp #card,body.sunwarp #tourbar,body.sunwarp #toast,body.sunwarp #labels,
+  body.suncam #hud,body.suncam #card,body.suncam #tourbar,body.suncam #toast,body.suncam #labels{opacity:0!important;pointer-events:none!important}
+  #sunHud .back{position:absolute;left:clamp(16px,3vw,42px);top:clamp(16px,3vh,34px);pointer-events:auto;
+    display:inline-flex;align-items:center;gap:9px;padding:8px 16px;border:1px solid rgba(235,231,223,.20);
+    border-radius:999px;background:rgba(3,5,11,.42);backdrop-filter:blur(6px);cursor:pointer;
+    font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.16em;color:var(--dim);transition:.25s}
+  #sunHud .back:hover{color:var(--paper);border-color:rgba(235,231,223,.5);background:rgba(235,231,223,.06)}
+  #sunHud .back i{font-style:normal;font-size:14px;line-height:1}
+  #sunHud .meta{position:absolute;left:clamp(16px,3vw,42px);bottom:clamp(26px,5vh,60px);max-width:min(380px,74vw)}
+  #sunHud .kick{font-family:"JetBrains Mono",monospace;font-size:9px;letter-spacing:.3em;color:rgba(255,206,150,.60)}
+  #sunHud h2{margin:7px 0 2px;font-size:28px;font-weight:400;letter-spacing:.16em;color:var(--paper)}
+  #sunHud .en{font-family:"JetBrains Mono",monospace;font-size:9px;letter-spacing:.34em;color:var(--faint)}
+  #sunHud .stats{margin-top:13px;display:grid;grid-template-columns:auto auto;gap:4px 20px;
+    font-size:9.5px;letter-spacing:.04em;color:rgba(235,231,223,.60);font-family:"JetBrains Mono",monospace}
+  #sunHud .stats b{font-weight:400;color:rgba(255,238,214,.94)}
+  #sunHud .note{margin-top:13px;font-size:10.5px;line-height:1.78;color:rgba(235,231,223,.55);max-width:340px}
+
   /* 面板 Tab：太阳系 / 黄道十二星座 */
   #panel .tabs{display:flex;gap:4px;margin:0 6px 9px;padding-bottom:9px;border-bottom:1px solid rgba(235,231,223,.10)}
   #panel .tab{flex:1 1 0;text-align:center;font-family:"JetBrains Mono",monospace;font-size:9.5px;
@@ -362,6 +385,24 @@
   </div>
   <div class="td" id="tourText">—</div>
   <div class="track"><i id="tourProg"></i></div>
+</div>
+
+<div id="sunFlash"></div>
+<div id="sunHud">
+  <div class="back" id="sunBack"><i>‹</i>返回星野</div>
+  <div class="meta">
+    <div class="kick">SOL · G2V · 46 亿年</div>
+    <h2>太阳</h2>
+    <div class="en">THE SUN</div>
+    <div class="stats">
+      <span>直径</span><b>1,392,700 km · 109 个地球</b>
+      <span>质量</span><b>占太阳系 99.86%</b>
+      <span>表面温度</span><b>约 5,500 ℃</b>
+      <span>核心温度</span><b>约 1,500 万 ℃</b>
+      <span>距地</span><b>1.496 亿 km · 光走 8 分 20 秒</span>
+    </div>
+    <div class="note">每秒约 6 亿吨氢聚变成氦，质量以光和热的形式向外辐射。你看到的这层「火」，是 5,500 ℃ 的等离子体在对流翻滚。</div>
+  </div>
 </div>
 
 <div id="tourEnd">
@@ -1014,7 +1055,8 @@ const grassBlades = (() => {
 
 /* ------------------------------------------------------------ 后期处理 */
 const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.70, 0.55, 0.22);
 composer.addPass(bloom);
 
@@ -1057,6 +1099,209 @@ warpPass.uniforms.uWarp = WARP;
 composer.addPass(warpPass);
 
 composer.addPass(new OutputPass());
+
+/* ------------------------------------------------------------ 太阳特写 */
+/*
+ * 点太阳不再是"弹张卡片就完事"：给这颗星开一台单独的相机、一个单独的场景。
+ * 云团级的米粒组织 + 临边昏暗 + 外圈日冕，全部在片元里算，
+ * 1 个球 + 1 张日冕片，没有贴图，也没有第二条后期链（复用同一个 composer）。
+ */
+const sunScene = new THREE.Scene();
+const sunCam = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 120);
+const SUN_DIST = 2.55;
+sunCam.position.set(0, 0, SUN_DIST);
+
+const sunUni = { uTime: { value: 0 }, uPulse: { value: 1 } };
+
+const sunMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(1, 96, 64),
+  new THREE.ShaderMaterial({
+    uniforms: sunUni,
+    vertexShader: /* glsl */`
+      varying vec3 vPos; varying vec3 vN; varying vec3 vV;
+      void main(){
+        vPos = position;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vN = normalize(normalMatrix * normal);
+        vV = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */`
+      precision highp float;
+      varying vec3 vPos; varying vec3 vN; varying vec3 vV;
+      uniform float uTime; uniform float uPulse;
+
+      float h31(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+      float n31(vec3 p){
+        vec3 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(
+          mix(mix(h31(i),               h31(i + vec3(1,0,0)), f.x),
+              mix(h31(i + vec3(0,1,0)), h31(i + vec3(1,1,0)), f.x), f.y),
+          mix(mix(h31(i + vec3(0,0,1)), h31(i + vec3(1,0,1)), f.x),
+              mix(h31(i + vec3(0,1,1)), h31(i + vec3(1,1,1)), f.x), f.y), f.z);
+      }
+      float fbm3(vec3 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * n31(p); p *= 2.07; a *= 0.5; } return s; }
+
+      void main(){
+        vec3 n = normalize(vPos);
+        float mu = clamp(dot(normalize(vN), normalize(vV)), 0.0, 1.0);
+
+        // 米粒组织：两层不同尺度、各自缓慢演化的噪声，叠出来才有"翻滚"感
+        float g1 = fbm3(n * 16.0 + vec3(0.0, 0.0, uTime * 0.07));
+        float g2 = fbm3(n * 38.0 - vec3(uTime * 0.06, 0.0, uTime * 0.04));
+        float gran = mix(g1, g2, 0.50);
+
+        // 大尺度对流：亮斑与暗区，让球面不是一块均质的橙
+        float cell = fbm3(n * 3.2 + vec3(uTime * 0.012, uTime * 0.008, 0.0));
+        float heat = smoothstep(0.34, 0.86, gran * 0.8 + cell * 0.55);
+
+        vec3 deep = vec3(0.34, 0.055, 0.008);
+        vec3 mid  = vec3(1.00, 0.31, 0.035);
+        vec3 hot  = vec3(1.90, 1.50, 1.02);
+        vec3 col = mix(deep, mid, smoothstep(0.10, 0.68, gran));
+        col = mix(col, hot, pow(heat, 2.2) * 1.0);
+
+        // 米粒之间的暗缝：把 granule 边界压暗，才看得出"细胞"结构
+        float lane = mix(0.44, 1.0, smoothstep(0.40, 0.72, gran));
+        col *= lane;
+
+        // 临边昏暗：靠边缘只剩 1/5 亮度，才像一颗球而不是一个圆片
+        float limb = 0.16 + 0.84 * pow(mu, 1.15);
+        col *= limb;
+        col += vec3(1.0, 0.36, 0.07) * pow(1.0 - mu, 4.0) * 0.9;   // 边缘一圈散射亮边
+
+        col *= 1.0 * uPulse;
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+  })
+);
+sunScene.add(sunMesh);
+
+const coronaMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: sunUni.uTime },
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`
+    precision highp float;
+    varying vec2 vUv;
+    uniform float uTime;
+    float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float n2(vec2 p){
+      vec2 i = floor(p), f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(h2(i), h2(i + vec2(1,0)), f.x), mix(h2(i + vec2(0,1)), h2(i + vec2(1,1)), f.x), f.y);
+    }
+    float fbm2(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { s += a * n2(p); p *= 2.05; a *= 0.5; } return s; }
+    void main(){
+      vec2 p = vUv - 0.5;
+      float rw = length(p) * 10.0;            // 世界半径，太阳半径 = 1
+      float ang = atan(p.y, p.x);
+      float wisps = fbm2(vec2(ang * 3.0, rw * 0.85 - uTime * 0.05));
+      float rays  = fbm2(vec2(ang * 11.0, rw * 1.7 + uTime * 0.02));
+      float rim   = exp(-pow((rw - 1.0) * 2.2, 2.0));            // 贴着球面的一圈亮边
+      float outer = smoothstep(3.4, 1.0, rw);                    // 3 个半径外彻底归零，留黑背景
+      float glow  = rim * 0.90
+                  + (rays * 0.55 + wisps * 0.45) * outer * exp(-(rw - 1.0) * 1.1) * 0.42;
+      vec3 c = mix(vec3(1.0, 0.36, 0.05), vec3(1.0, 0.74, 0.36), rim);
+      gl_FragColor = vec4(c * glow, 1.0);
+    }`,
+});
+const sunCorona = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), coronaMat);
+sunCorona.frustumCulled = false;
+sunScene.add(sunCorona);
+
+/* 过渡：先让星光糊成径向流，闪一下白，再露出这颗星；返回时反过来 */
+const SUNC = { on: false, phase: 'idle', t0: 0, yaw: 0, pitch: 0, drag: false, lastX: 0, lastY: 0 };
+const IN_MS = 1500, OUT_MS = 1300;
+const sunFlashEl = document.getElementById('sunFlash');
+const easek = (t) => t * t * (3 - 2 * t);
+
+function sunUpdate(now) {
+  const sec = now * 0.001;
+  sunUni.uTime.value = sec;
+  sunUni.uPulse.value = 1.0 + 0.045 * Math.sin(sec * 2.3) + 0.02 * Math.sin(sec * 7.1);
+  const cp = Math.cos(SUNC.pitch);
+  sunCam.position.set(SUN_DIST * Math.sin(SUNC.yaw) * cp, SUN_DIST * Math.sin(SUNC.pitch), SUN_DIST * Math.cos(SUNC.yaw) * cp);
+  sunCam.lookAt(0, 0, 0);
+  // 日冕片永远挡在球后面且正对相机
+  sunCorona.position.set(0, 0, 0).addScaledVector(new THREE.Vector3().subVectors(new THREE.Vector3(0, 0, 0), sunCam.position).normalize(), 1.45);
+  sunCorona.quaternion.copy(sunCam.quaternion);
+}
+
+function enterSun() {
+  if (SUNC.phase === 'in' || SUNC.on) return;
+  if (tour.on) tourStop(true);
+  hideInfo();
+  SUNC.yaw = 0; SUNC.pitch = 0;
+  sunCam.fov = 55; sunCam.updateProjectionMatrix();
+  // 把径向模糊的中心挪到太阳在屏上的位置：才像"朝着它飞"，而不是原地打转
+  const wSun = bodyWorld[0];
+  if (wSun) {
+    const pr = wSun.clone().project(camera);
+    if (pr.z < 1) warpPass.uniforms.uCenter.value.set(pr.x * 0.5 + 0.5, pr.y * 0.5 + 0.5);
+  }
+  document.body.classList.add('sunwarp');     // 穿梭一开始主角 HUD 就让位
+  SUNC.phase = 'in'; SUNC.t0 = performance.now();
+}
+function exitSun() {
+  if (!SUNC.on || SUNC.phase === 'out') return;
+  SUNC.phase = 'out'; SUNC.t0 = performance.now();
+}
+document.getElementById('sunBack').addEventListener('click', exitSun);
+
+function sunViewTick(now) {
+  if (SUNC.phase === 'idle') return false;
+  const k = now - SUNC.t0;
+
+  if (SUNC.phase === 'in') {
+    const t = Math.min(1, k / IN_MS);
+    if (t < 0.50) { WARP.value = easek(t / 0.50); sunFlashEl.style.opacity = '0'; }
+    else if (t < 0.62) {
+      WARP.value = 1.0;
+      sunFlashEl.style.opacity = String((t - 0.50) / 0.12);
+    } else {
+      if (!SUNC.on) {                       // 白光最亮的那一帧换场景，看不出切
+        renderPass.scene = sunScene; renderPass.camera = sunCam;
+        document.body.classList.remove('sunwarp');
+        document.body.classList.add('suncam');
+        SUNC.on = true;
+        WARP.value = 0;
+        bloom.strength = 0.62; bloom.radius = 0.48; bloom.threshold = 0.66;
+      }
+      sunFlashEl.style.opacity = String(Math.max(0, 1 - (t - 0.62) / 0.38));
+    }
+    if (t >= 1) { SUNC.phase = 'sun'; sunFlashEl.style.opacity = '0'; }
+    sunUpdate(now);
+    composer.render();
+    return true;
+  }
+
+  if (SUNC.phase === 'sun') { sunUpdate(now); composer.render(); return true; }
+
+  // out
+  const t = Math.min(1, k / OUT_MS);
+  sunFlashEl.style.opacity = String(t < 0.20 ? t / 0.20 : Math.max(0, 1 - (t - 0.20) / 0.80));
+  if (t > 0.20 && SUNC.on) {
+    renderPass.scene = scene; renderPass.camera = camera;
+    document.body.classList.remove('suncam');
+    document.body.classList.add('sunwarp');   // 回去的路上 HUD 也先别弹出来
+    SUNC.on = false;
+    bloom.strength = 0.70; bloom.radius = 0.55; bloom.threshold = 0.22;
+    setFov(state.fov);                        // 回来时把视场收束到当前值
+  }
+  if (t > 0.20) WARP.value = 0.85 * (1 - (t - 0.20) / 0.80);
+  sunUpdate(now);
+  composer.render();
+  if (t >= 1) {
+    SUNC.phase = 'idle'; WARP.value = 0; sunFlashEl.style.opacity = '0';
+    warpPass.uniforms.uCenter.value.set(0.5, 0.52);   // 交还给入场电影的默认中心
+    document.body.classList.remove('sunwarp');
+  }
+  return true;
+}
 
 
 /* =================================================== 行星：历表与坐标链 */
@@ -1830,6 +2075,7 @@ let downX = 0, downY = 0, downT = 0;
 
 function onDown(e) {
   if (!booted) return;
+  if (SUNC.on) { SUNC.drag = true; SUNC.lastX = e.clientX; SUNC.lastY = e.clientY; return; }
   // 入场镜头期间：任何按下都是"跳过"，不接管视角
   if (CINE.active) { cineSkip(); return; }
   // 控件上的按下不算拖拽（滑杆、按钮、清单行都要能正常操作）
@@ -1840,6 +2086,14 @@ function onDown(e) {
   downX = e.clientX; downY = e.clientY; downT = performance.now();
 }
 function onMove(e) {
+  if (SUNC.on) {
+    if (!SUNC.drag) return;
+    const dx = e.clientX - SUNC.lastX, dy = e.clientY - SUNC.lastY;
+    SUNC.lastX = e.clientX; SUNC.lastY = e.clientY;
+    SUNC.yaw = Math.max(-0.55, Math.min(0.55, SUNC.yaw - dx * 0.0035));
+    SUNC.pitch = Math.max(-0.42, Math.min(0.42, SUNC.pitch - dy * 0.0030));
+    return;
+  }
   if (!state.dragging) return;
   const dx = e.clientX - state.lastX;
   const dy = e.clientY - state.lastY;
@@ -1852,6 +2106,7 @@ function onMove(e) {
   state.pitch = Math.max(-0.30, Math.min(0.88, state.pitch + dy * pitchK));
 }
 function onUp(e) {
+  if (SUNC.on) { SUNC.drag = false; return; }
   const wasDragging = state.dragging;
   state.dragging = false;
   if (!wasDragging || !booted) return;
@@ -1898,6 +2153,13 @@ function setFov(v) {
   state.zoomAt = performance.now();
 }
 window.addEventListener('wheel', (e) => {
+  if (SUNC.on) {
+    e.preventDefault();
+    const dy = Math.max(-240, Math.min(240, e.deltaY));
+    sunCam.fov = Math.max(24, Math.min(78, sunCam.fov * Math.exp(dy * 0.0018)));
+    sunCam.updateProjectionMatrix();
+    return;
+  }
   if (!booted || CINE.active) return;
   // Ctrl / ⌘ + 滚轮（触控板捏合）= 视场缩放；单独滚轮仍然是推时间
   if (e.ctrlKey || e.metaKey) {
@@ -2030,6 +2292,8 @@ function selectBody(i, doFocus) {
   ding(1046 - Math.min(420, BODIES[i].size * 16));
   showCard(i);
   if (doFocus) focusBody(i);     // 只有从清单里点才算"对准"，直接在星空里点是原地弹出卡片
+  // 太阳单独有"特写场景"：点它就星光穿梭进去，不是只弹一张文字卡
+  if (BODIES[i].key === 'sun') enterSun();
 }
 
 function constellationOf(starIdx) {
@@ -2135,7 +2399,10 @@ function focusStar(k) {
 window.addEventListener('keydown', (e) => {
   if (!booted) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); enterNight(); } return; }
   const k = e.key.toLowerCase();
-  if (k === 'escape') { hideCard(); hideInfo(); if (tour.on) tourStop(); }
+  if (k === 'escape') {
+    if (SUNC.on || SUNC.phase === 'in') { exitSun(); return; }
+    hideCard(); hideInfo(); if (tour.on) tourStop();
+  }
   if (k === 'l') { state.showLabels = !state.showLabels; document.getElementById('btnLabel').classList.toggle('on', state.showLabels); }
   if (k === 'e') { state.showEcl = !state.showEcl; document.getElementById('btnEcl').classList.toggle('on', state.showEcl); }
   if (k === 'c') { state.showConst = !state.showConst; applyConstVisual(); }
@@ -2609,6 +2876,9 @@ function tick() {
   const dt = Math.min(0.05, (now - t0) / 1000);
   t0 = now;
 
+  // 太阳特写期间由它自己接管这一帧（换场景、渲染、推进时间都给太阳）
+  if (sunViewTick(now)) { requestAnimationFrame(tick); return; }
+
   // 时间推进：1× = 真实流逝；入场时叠一个 CINE.boost（7200×）做"斗转"；惯性衰减
   if (!state.dragging) {
     state.timeMs += dt * (state.speed + (CINE.active ? CINE.boost : 0)) * 1000;
@@ -2928,6 +3198,8 @@ document.getElementById('boot').addEventListener('click', enterNight);
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h);
+  sunCam.aspect = w / h;
+  sunCam.updateProjectionMatrix();
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   composer?.setSize?.(w, h);
