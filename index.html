@@ -236,6 +236,13 @@
   #hint{position:absolute;left:50%;transform:translateX(-50%);bottom:clamp(74px,10.5vh,116px);
     font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.18em;color:var(--faint);
     transition:opacity .8s;white-space:nowrap;max-width:92vw;text-align:center}
+  /* 落地后"已对准某某"的短提示（独立于 #hint，不会被主循环改写） */
+  #toast{position:absolute;left:50%;top:clamp(120px,17vh,190px);transform:translate(-50%,-4px);
+    font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.16em;color:var(--dim);
+    padding:7px 16px;border:1px solid rgba(235,231,223,.13);border-radius:999px;
+    background:rgba(9,12,20,.55);backdrop-filter:blur(8px);pointer-events:none;
+    opacity:0;transition:opacity .6s var(--ease),transform .6s var(--ease)}
+  #toast.on{opacity:.92;transform:translate(-50%,0)}
 
   /* 窄屏 / 小窗口 */
   @media (max-width: 860px){
@@ -315,6 +322,7 @@
   </div>
 
   <div id="hint">拖拽转视角 · 滚轮推进时间 · Ctrl+滚轮缩放视场 · 点清单对准某颗星</div>
+  <div id="toast"></div>
   <div id="compass"><div class="dial"><div class="ticks" id="ticks"></div><div class="needle"></div></div><div class="hdg" id="hdg">—</div></div>
   <div id="zoom">视场 58°</div>
 </div>
@@ -1287,19 +1295,14 @@ for (let i = 0; i <= ECL_N; i++) {
 }
 
 /* --------------------------------------------------------------- 状态 */
-function nightOrDefault(ms) {
-  const d = new Date(ms);
-  const h = d.getHours();
-  // 白天打开时给一个夜空；夜里/清晨则用现在的时刻
-  if (h >= 6 && h < 19) { const n = new Date(d); n.setHours(21, 30, 0, 0); return n.getTime(); }
-  return ms;
-}
+/* 白天打开也要用真实时刻：本页是"固定夜空观测模式"，
+   天光不会压掉星空，所以不需要把 09:40 偷偷改成 21:30。 */
 
 const state = {
   timeMs: (() => {
     const q = new URLSearchParams(location.search).get('at');   // ?at=2026-11-11T21:30
     if (q) { const t = Date.parse(q); if (!isNaN(t)) return t; }
-    return nightOrDefault(Date.now());
+    return Date.now();
   })(),
   speed: 1,
   lastSpeed: 1,          // 暂停后"开始"要恢复到原来的倍速
@@ -2598,6 +2601,50 @@ function cineTick(now) {
   if (t >= 1 || CINE.skipped) landNow();
 }
 
+const toastEl = document.getElementById('toast');
+let toastTimer = 0;
+function toast(msg, ms = 3200) {
+  if (!toastEl) return;
+  toastEl.textContent = msg;
+  toastEl.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('on'), ms);
+}
+
+/* 进入主页面后的第一件事：把时刻拨回"现在"，再去找此刻该看的那颗星。
+   白昼（太阳在地平线以上）→ 对准太阳；夜里 → 对准北极星。
+   北极星并非任何地方都看得到：赤纬 +89.3°，只有北纬 ≥0.7° 才永远在地平线上，
+   低纬它贴着地平线、南半球直接在地平线下 —— 所以带上纬度兜底。 */
+function aimAt(dir) {
+  const d = dir.clone().normalize();
+  state.focus = { yaw: Math.atan2(-d.x, -d.z), pitch: Math.asin(Math.max(-1, Math.min(1, d.y))) };
+}
+
+function gotoNow() {
+  const q = new URLSearchParams(location.search);
+  if (q.get('at') || q.get('yaw') || q.get('pitch')) return;   // 分享链接钉住的不抢
+  // 位置必须用"此刻"的恒星时现算：bodyWorld / cWorld 是上一帧的，入场 boost 期间差得很远
+  const sky = skyMatrix(lstRad(state.timeMs));
+
+  const sun = currentEphem[0].eq.clone().applyMatrix3(sky).normalize();
+  if (sun.y > 0) {                                  // 太阳在地平线以上 = 白天
+    aimAt(sun);
+    toast(`此刻是白天 · ${pad2(new Date().getHours())}:${pad2(new Date().getMinutes())} 太阳在地平线上，已对准`);
+    return;
+  }
+
+  const polaris = cStars[POLARIS_STAR].dir.clone().applyMatrix3(sky).normalize();
+  const latDeg = LAT / DEG;
+  if (polaris.y > 0.02 && latDeg >= 3) {
+    aimAt(polaris);
+    toast(`此刻是夜 · 已对准北极星（高度约 ${(Math.asin(polaris.y) / DEG).toFixed(0)}°，正北）`);
+  } else {
+    // 纬度太低 / 南半球：北极星贴地平线或在地平线以下，硬对准会盯住一片黑
+    state.focus = { yaw: 0, pitch: 0.06 };
+    toast(`本地（${latDeg.toFixed(1)}°）看不到北极星 · 已对准正北方的天区`);
+  }
+}
+
 function landNow() {
   if (!CINE.active) return;
   CINE.active = false;
@@ -2612,12 +2659,22 @@ function landNow() {
   camera.fov = state.fov;
   camera.updateProjectionMatrix();
   U.uFov.value = state.fov;
+  // 入场时 7200× 的 boost 让 timeMs 跑掉了好几个小时，落地这一下拨回真实时刻，
+  // 跳变正好藏在"触地震屏 + 回弹"里，等构图定格后再去对准目标
+  if (!new URLSearchParams(location.search).get('at')) {
+    state.timeMs = Date.now();
+    refreshEphem(true);
+  }
+
   const hud = document.getElementById('hud');
   hud.style.opacity = '1';
   hud.style.pointerEvents = '';
 
   // 落地后**不再**自动对准天体：那一下会把视线抬到天上，草原就出画了。
   // 终帧保持"抬望眼 + 脚下一片草"的构图，要看哪颗天体让用户自己点。
+  // 先让"抬望眼 + 脚下一片草"的终帧定格一会儿，再平滑转到此刻该看的天体
+  setTimeout(gotoNow, 1400);
+
   const q = new URLSearchParams(location.search);
   if (q.get('info')) setTimeout(showInfo, 900);
   if (q.get('tour')) setTimeout(() => { document.getElementById('btnTour').classList.add('on'); tourStart(); }, 1400);
