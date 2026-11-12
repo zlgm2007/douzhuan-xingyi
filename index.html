@@ -240,6 +240,7 @@
   #card .ch{display:flex;align-items:baseline;gap:8px;min-width:0}
   #card .ch i{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:1px}
   #card .go{margin-top:11px;display:flex;align-items:center;justify-content:center;gap:6px;
+    touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
     padding:7px 10px;border:1px solid rgba(235,231,223,.22);border-radius:8px;cursor:pointer;
     font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.18em;color:rgba(235,231,223,.72);
     background:rgba(235,231,223,.035);transition:.22s}
@@ -314,6 +315,16 @@
     #hint{font-size:9px;letter-spacing:.1em;white-space:normal;bottom:clamp(96px,13vh,132px)}
     #card{width:206px;padding:11px 13px 12px;max-height:54vh}
     #card p{font-size:10.5px;line-height:1.7}
+    /* 特写 HUD 在竖屏上收一档，并在底部垫一层渐隐，文字压在盘面上也读得清 */
+    #sunHud .back{left:12px;top:12px;padding:6px 12px;font-size:9px}
+    #sunHud .back i{font-size:12px}
+    #sunHud .meta{left:0;right:0;bottom:0;max-width:none;padding:26px 16px 18px;
+      background:linear-gradient(to top,rgba(2,4,10,.86) 26%,rgba(2,4,10,.42) 68%,rgba(2,4,10,0))}
+    #sunHud h2{font-size:21px;margin:5px 0 1px}
+    #sunHud .kick{font-size:8px}
+    #sunHud .stats{margin-top:9px;gap:3px 14px;font-size:8.5px}
+    #sunHud .note{margin-top:9px;font-size:9.5px;line-height:1.65;max-width:none}
+    #sunHud .src{font-size:7px;letter-spacing:.1em}
   }
 </style>
 </head>
@@ -1427,7 +1438,9 @@ function enterView(key) {
   if (tour.on) tourStop(true);
   hideInfo();
   VIEWC.key = key; VIEWC.yaw = 0; VIEWC.pitch = 0;
-  VIEWC.dist = cfg.dist || 2.55;
+  // 竖屏手机上下窄：相机后撤一档，否则球顶到画框、左下角 HUD 直接压在盘面上
+  const narrow = window.innerWidth < 700 && window.innerHeight > window.innerWidth;
+  VIEWC.dist = (cfg.dist || 2.55) * (narrow ? 1.45 : 1);
   viewCam.fov = cfg.fov || 50;
   viewCam.updateProjectionMatrix();
   // 换外观：太阳走程序化球 + 日冕，其余走反照图球（土星多一张环）
@@ -1455,6 +1468,11 @@ function exitView() {
   if (!VIEWC.on || VIEWC.phase === 'out') return;
   VIEWC.phase = 'out'; VIEWC.t0 = performance.now();
 }
+// 返回也吃 pointerup：手机端不必依赖合成 click（exitView 自己有 phase 守卫，重复调用无害）
+document.getElementById('sunBack').addEventListener('pointerup', (e) => {
+  if (e.cancelable) e.preventDefault();
+  exitView();
+});
 document.getElementById('sunBack').addEventListener('click', exitView);
 
 function sunViewTick(now) {
@@ -2285,7 +2303,10 @@ function onDown(e) {
   // 入场镜头期间：任何按下都是"跳过"，不接管视角
   if (CINE.active) { cineSkip(); return; }
   // 控件上的按下不算拖拽（滑杆、按钮、清单行都要能正常操作）
-  if (e.target && e.target.closest && e.target.closest('input, .pill, .speed, .row, #panel, #boot')) return;
+  // 控件上的按下不算拖拽（滑杆、按钮、清单行、卡片都要能正常操作）
+  // #card 必须在名单里：否则按「查看细节」会被当成拖拽，pointerup 先把手卡收掉，
+  // 手机端（touchend 后重新命中测试）那个 click 就落不到按钮上，表现成"点了没反应"
+  if (e.target && e.target.closest && e.target.closest('input, .pill, .speed, .row, #panel, #boot, #card, #sunHud, #tourbar')) return;
   state.dragging = true;
   state.lastX = e.clientX; state.lastY = e.clientY; state.lastT = performance.now();
   state.focus = null;      // 手动拖拽立刻接管视角，取消正在进行的自动对准
@@ -2332,6 +2353,7 @@ function onUp(e) {
     if (d < bestD) { bestD = d; best = i; }
   });
   if (best >= 0) { selectBody(best, false); return; }
+  if (e.target && e.target.closest && e.target.closest('#card, #sunHud, #tourbar, #tourEnd')) return;
   // 行星没命中，再找星座亮星（半径 16px，取最近）
   if (state.showConst) {
     let bc = -1, bd = 16;     // bc 现在存的是星点索引
@@ -2502,14 +2524,24 @@ function selectBody(i, doFocus) {
   // 点天体只出卡片；要看细节得再点卡片上的「查看细节」进特写（见 cardGo 的绑定）
 }
 
-// 卡片上的「查看细节」：先关卡片，再走那段星光穿梭进入这颗星的独立场景
-document.getElementById('cardGo').addEventListener('click', (ev) => {
+// 卡片上的「查看细节」：先关卡片，再走那段星光穿梭进入这颗星的独立场景。
+// 手机端 click 可能被丢（触点起手时元素已被 pointer-events:none），所以 pointerup 就自己处理，
+// 并用 preventDefault 掐掉随后那次合成 click，靠时间戳去重防双触发。
+const cardGoEl = document.getElementById('cardGo');
+let cardGoLast = 0;
+function cardGoTap(ev) {
   ev.stopPropagation();
-  const key = document.getElementById('cardGo').dataset.key;
+  if (ev.cancelable) ev.preventDefault();
+  const key = cardGoEl.dataset.key;
   if (!key || !PLANET_VIEWS[key]) return;
+  const now = performance.now();
+  if (now - cardGoLast < 600) return;
+  cardGoLast = now;
   hideCard();
   enterView(key);
-});
+}
+cardGoEl.addEventListener('pointerup', cardGoTap);
+cardGoEl.addEventListener('click', cardGoTap);
 
 function constellationOf(starIdx) {
   for (let i = 0; i < cRange.length; i++) {
@@ -3412,7 +3444,12 @@ document.getElementById('boot').addEventListener('click', enterNight);
 /* --------------------------------------------------------------- 启动 */
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
+  // composer 的 RT 要跟 canvas 的物理像素对齐：只给 CSS 尺寸的话，
+  // 高 dpr 屏上后处理只画到画布左上角一块（手机尤其明显，桌面因为被终局 quad 拉伸才不明显）
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+  renderer.setPixelRatio(dpr);
   renderer.setSize(w, h);
+  if (composer && composer.setPixelRatio) composer.setPixelRatio(dpr);
   viewCam.aspect = w / h;
   viewCam.updateProjectionMatrix();
   camera.aspect = w / h;
