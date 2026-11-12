@@ -12,7 +12,12 @@
     --ease:cubic-bezier(.22,1,.36,1);
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%;background:var(--ink);color:var(--paper);overflow:hidden}
+  html,body{height:100%;background:var(--ink);color:var(--paper);overflow:hidden;
+    /* 手机上手指按在天区拖拽 = 转视角，绝不能让浏览器当成页面拖动／下拉刷新，
+       否则中途来一发 pointercancel，拖拽被切成一段一段的（"一小步一小步"的来源） */
+    touch-action:none;overscroll-behavior:none;-webkit-overflow-scrolling:touch}
+  /* 需要纵向滑动的地方单独放开手势：清单与卡片内部还能滚 */
+  #panel,#card{touch-action:pan-y}
   body{font-family:"Noto Serif SC","Songti SC",serif;-webkit-font-smoothing:antialiased}
   #app{position:fixed;inset:0}
   #app canvas{display:block;pointer-events:none}
@@ -32,6 +37,16 @@
   #enter:hover{background:rgba(235,231,223,.07);border-color:rgba(235,231,223,.42);transform:translateY(-1px)}
   #boot .tip{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.2em;color:var(--faint);
     opacity:.7}
+  /* 入场前的自动定位 / 校时回显 */
+  #boot .probe{display:flex;flex-direction:column;gap:7px;justify-content:center;align-items:center;
+    font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.14em;color:var(--dim);
+    margin-top:2px}
+  #boot .probe span{display:flex;align-items:center;gap:8px;opacity:0;transform:translateY(3px);
+    transition:opacity .5s var(--ease),transform .5s var(--ease)}
+  #boot .probe span.in{opacity:.92;transform:none}
+  #boot .probe i{width:4px;height:4px;border-radius:50%;background:rgba(235,231,223,.5);flex:0 0 auto}
+  #boot .probe i.ok{background:#9fd2b4}
+  #boot .probe i.no{background:#c9a487}
   #boot .err{margin-top:10px;font-family:"JetBrains Mono",monospace;font-size:10px;line-height:1.7;
     color:#ff8f7a;max-width:70vw;opacity:.85;white-space:pre-wrap;text-align:left}
 
@@ -51,6 +66,19 @@
     backdrop-filter:blur(8px);cursor:pointer;transition:color .4s,border-color .4s,background .4s}
   .pill:hover{color:var(--paper);border-color:rgba(235,231,223,.4)}
   .pill.on{color:var(--paper);border-color:rgba(235,231,223,.5);background:rgba(235,231,223,.09)}
+
+  .tourwrap{position:relative}
+  .tourwrap .car{font-style:normal;font-size:8px;opacity:.55;margin-left:2px}
+  #tourMenu{position:absolute;right:0;top:calc(100% + 8px);z-index:20;width:196px;padding:6px;
+    border:1px solid rgba(235,231,223,.16);border-radius:10px;background:rgba(4,7,14,.94);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 16px 40px rgba(0,0,0,.55);
+    opacity:0;transform:translateY(-6px);pointer-events:none;transition:.22s var(--ease)}
+  #tourMenu.on{opacity:1;transform:none;pointer-events:auto}
+  #tourMenu .tm{padding:8px 10px;border-radius:7px;cursor:pointer;transition:.18s}
+  #tourMenu .tm:hover{background:rgba(235,231,223,.08)}
+  #tourMenu .tm b{display:block;font-size:12px;font-weight:400;letter-spacing:.1em;color:var(--paper)}
+  #tourMenu .tm i{display:block;margin-top:3px;font-style:normal;font-family:"JetBrains Mono",monospace;
+    font-size:9px;letter-spacing:.04em;color:var(--faint)}
 
   /* 演示动线（导览条） */
   #tourbar{position:fixed;left:50%;bottom:clamp(86px,11.5vh,118px);z-index:16;width:min(520px,90vw);
@@ -102,15 +130,78 @@
     font-family:"JetBrains Mono",monospace;font-size:13px;transition:.25s}
   #info .x:hover{color:var(--paper);background:rgba(235,231,223,.08)}
 
-  /* 面板 Tab：太阳系 / 黄道十二星座 */
-  #panel .tabs{display:flex;gap:4px;margin:0 6px 9px;padding-bottom:9px;border-bottom:1px solid rgba(235,231,223,.10)}
-  #panel .tab{flex:1 1 0;text-align:center;font-family:"JetBrains Mono",monospace;font-size:9.5px;
+  /* 演示结束的收束弹框：把星空还给人 */
+  #tourEnd{position:fixed;inset:0;z-index:26;display:flex;align-items:center;justify-content:center;
+    background:rgba(2,4,10,.42);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+    opacity:0;pointer-events:none;transition:opacity .5s var(--ease)}
+  #tourEnd.on{opacity:1;pointer-events:auto}
+  #tourEnd .box{width:min(420px,88vw);padding:26px 26px 20px;text-align:center;
+    border:1px solid rgba(235,231,223,.16);border-radius:14px;background:rgba(4,7,14,.92);
+    box-shadow:0 24px 70px rgba(0,0,0,.6);transform:translateY(6px);transition:transform .55s var(--ease)}
+  #tourEnd.on .box{transform:none}
+  #tourEnd .kick{font-family:"JetBrains Mono",monospace;font-size:9px;letter-spacing:.3em;color:var(--faint)}
+  #tourEnd h2{margin:10px 0 0;font-size:20px;font-weight:400;letter-spacing:.2em;color:var(--paper)}
+  #tourEnd p{margin:10px 0 0;font-size:11px;line-height:1.8;color:rgba(235,231,223,.62)}
+  #tourEnd .btns{display:flex;gap:10px;justify-content:center;margin-top:18px}
+  #tourEnd .btns span{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.14em;
+    padding:7px 18px;border:1px solid rgba(235,231,223,.20);border-radius:999px;color:var(--dim);
+    cursor:pointer;transition:.25s}
+  #tourEnd .btns span:hover{color:var(--paper);border-color:rgba(235,231,223,.44);background:rgba(235,231,223,.06)}
+
+  /* 太阳特写：另一台相机、另一个场景；HUD 让位给这颗星 */
+  #sunFlash{position:fixed;inset:0;z-index:27;pointer-events:none;opacity:0;
+    background:radial-gradient(circle at 50% 50%,#fff 0%,#ffd9a8 46%,#ff9436 100%)}
+  #sunHud{position:fixed;inset:0;z-index:18;pointer-events:none;opacity:0;
+    transition:opacity .7s var(--ease)}
+  body.suncam #sunHud{opacity:1}
+  body.sunwarp #hud,body.sunwarp #card,body.sunwarp #tourbar,body.sunwarp #toast,body.sunwarp #labels,
+  body.suncam #hud,body.suncam #card,body.suncam #tourbar,body.suncam #toast,body.suncam #labels{opacity:0!important;pointer-events:none!important}
+  #sunHud .back{position:absolute;left:clamp(16px,3vw,42px);top:clamp(16px,3vh,34px);pointer-events:auto;
+    display:inline-flex;align-items:center;gap:9px;padding:8px 16px;border:1px solid rgba(235,231,223,.20);
+    border-radius:999px;background:rgba(3,5,11,.42);backdrop-filter:blur(6px);cursor:pointer;
+    font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.16em;color:var(--dim);transition:.25s}
+  #sunHud .back:hover{color:var(--paper);border-color:rgba(235,231,223,.5);background:rgba(235,231,223,.06)}
+  #sunHud .back i{font-style:normal;font-size:14px;line-height:1}
+  #sunHud .meta{position:absolute;left:clamp(16px,3vw,42px);bottom:clamp(26px,5vh,60px);max-width:min(380px,74vw)}
+  #sunHud .kick{font-family:"JetBrains Mono",monospace;font-size:9px;letter-spacing:.3em;color:rgba(255,206,150,.60)}
+  #sunHud h2{margin:7px 0 2px;font-size:28px;font-weight:400;letter-spacing:.16em;color:var(--paper)}
+  #sunHud .en{font-family:"JetBrains Mono",monospace;font-size:9px;letter-spacing:.34em;color:var(--faint)}
+  #sunHud .stats{margin-top:13px;display:grid;grid-template-columns:auto auto;gap:4px 20px;
+    font-size:9.5px;letter-spacing:.04em;color:rgba(235,231,223,.60);font-family:"JetBrains Mono",monospace}
+  #sunHud .stats b{font-weight:400;color:rgba(255,238,214,.94)}
+  #sunHud .note{margin-top:13px;font-size:10.5px;line-height:1.78;color:rgba(235,231,223,.55);max-width:340px}
+  #sunHud .src{margin-top:10px;font-family:"JetBrains Mono",monospace;font-size:8px;letter-spacing:.14em;
+    color:rgba(235,231,223,.30)}
+  /* 讲解按钮：跟「返回星野」同一个 pill 家族，放右下角让讲解不打断读字 */
+  #sunHud .say{position:absolute;right:clamp(16px,3vw,42px);bottom:clamp(26px,5vh,60px);pointer-events:auto;
+    display:inline-flex;align-items:center;gap:9px;padding:9px 18px;border:1px solid rgba(235,231,223,.20);
+    border-radius:999px;background:rgba(3,5,11,.42);backdrop-filter:blur(6px);cursor:pointer;
+    font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.16em;color:var(--dim);
+    transition:.25s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+    user-select:none;-webkit-user-select:none}
+  #sunHud .say:hover{color:var(--paper);border-color:rgba(235,231,223,.5);background:rgba(235,231,223,.06)}
+  #sunHud .say i{font-style:normal;font-size:13px;line-height:1;color:rgba(255,206,150,.75)}
+  #sunHud .say.playing{color:rgba(255,238,214,.95);border-color:rgba(255,206,150,.55);
+    background:rgba(255,206,150,.10)}
+  #sunHud .say.playing i{color:rgba(255,206,150,.95);animation:sayPulse 1.6s ease-in-out infinite}
+  @keyframes sayPulse{0%,100%{opacity:.55}50%{opacity:1}}
+
+  /* 面板 Tab：太阳系 / 十二星座 / 群星（宽度不够就靠左右箭头翻） */
+  #panel .tabs{display:flex;align-items:center;gap:2px;margin:0 6px 9px;padding-bottom:9px;border-bottom:1px solid rgba(235,231,223,.10)}
+  #tabs .tnav{flex:0 0 18px;text-align:center;font-size:12px;line-height:1;color:var(--dim);cursor:pointer;
+    padding:4px 0;border:1px solid rgba(235,231,223,.16);border-radius:5px;user-select:none;
+    transition:color .3s,border-color .3s,opacity .3s;opacity:.8}
+  #tabs .tnav:hover,#tabs .tnav:active{opacity:1;border-color:rgba(235,231,223,.38)}
+  #tabs .tnav:hover{color:var(--paper)}
+  #tabWrap{flex:1 1 auto;min-width:0;display:flex;gap:4px;overflow:hidden;scroll-behavior:smooth;scrollbar-width:none}
+  #tabWrap::-webkit-scrollbar{width:0;height:0}
+  #panel .tab{flex:1 1 0;min-width:0;text-align:center;white-space:nowrap;overflow:hidden;font-family:"JetBrains Mono",monospace;font-size:9.5px;
     letter-spacing:.12em;color:var(--faint);padding:5px 4px;border:1px solid transparent;border-radius:5px;
     cursor:pointer;transition:.3s;white-space:nowrap}
   #panel .tab:hover{color:var(--paper)}
   #panel .tab.on{color:var(--paper);border-color:var(--line);background:rgba(235,231,223,.07)}
-  #rowsConst{display:none}
-  #rowsConst.show{display:block}
+  #rowsConst,#rowsStars{display:none}
+  #rowsConst.show,#rowsStars.show{display:block}
 
   /* 星座选中名标 */
   #clab{position:fixed;left:0;top:0;z-index:12;pointer-events:none;opacity:0;transition:opacity .4s;
@@ -121,6 +212,11 @@
   /* 星球清单 */
   #panel{position:absolute;right:clamp(14px,2.6vw,36px);top:clamp(64px,9vh,104px);width:min(302px,48vw);
     padding:12px 4px 6px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  /* 条目变多以后清单要能在右下罗盘上方自己滚，不然最后几行会被罗盘和底栏切掉；
+     滚动只发生在这里，tab 与表头始终钉在顶上 */
+  #rows,#rowsConst,#rowsStars{max-height:calc(100vh - 400px);overflow-y:auto;overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;overscroll-behavior:contain}
+  #rows::-webkit-scrollbar,#rowsConst::-webkit-scrollbar,#rowsStars::-webkit-scrollbar{width:0;height:0}
   #panel .hd{display:flex;justify-content:space-between;font-family:"JetBrains Mono",monospace;
     font-size:9.5px;letter-spacing:.2em;color:var(--faint);padding:0 8px 8px}
   .row{display:grid;grid-template-columns:9px 1fr 86px 34px;align-items:center;gap:8px;white-space:nowrap;
@@ -162,6 +258,8 @@
     padding:5px 9px;border:1px solid transparent;border-radius:4px;cursor:pointer;transition:.3s}
   .speed .s:hover{color:var(--paper)}
   .speed .s.on{color:var(--paper);border-color:var(--line);background:rgba(235,231,223,.07)}
+  .speed .s.reset{margin-left:6px;padding-left:11px;border-left:1px solid var(--line);border-radius:0 4px 4px 0}
+  .speed .s.reset:hover{color:var(--paper);background:rgba(235,231,223,.06)}
 
   /* 天体标签 */
   #labels{position:fixed;inset:0;z-index:12;pointer-events:none}
@@ -169,6 +267,9 @@
     font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.12em;white-space:nowrap;
     color:rgba(235,231,223,.8);opacity:0;transition:opacity .4s;text-shadow:0 0 8px rgba(0,0,0,.9)}
   .lab i{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .lab.flab{font-size:10px;letter-spacing:.1em;color:rgba(235,231,223,.9)}
+  .lab.flab b{font-weight:400;color:rgba(207,224,255,.58);margin-left:6px}
+  .lab.flab.down{color:rgba(235,231,223,.45)}
 
   /* 天体介绍卡片 */
   #card{position:fixed;left:0;top:0;z-index:14;width:236px;padding:13px 15px 14px;
@@ -184,11 +285,20 @@
   #card::-webkit-scrollbar-track{background:transparent}
   #card .ch{display:flex;align-items:baseline;gap:8px;min-width:0}
   #card .ch i{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:1px}
+  #card .go{margin-top:11px;display:flex;align-items:center;justify-content:center;gap:6px;
+    touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
+    padding:7px 10px;border:1px solid rgba(235,231,223,.22);border-radius:8px;cursor:pointer;
+    font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.18em;color:rgba(235,231,223,.72);
+    background:rgba(235,231,223,.035);transition:.22s}
+  #card .go:hover{color:var(--paper);border-color:rgba(235,231,223,.46);background:rgba(235,231,223,.10)}
+  #card .go i{font-style:normal;font-size:12px;line-height:1}
+  #card .go.off{display:none}
   #card .ch b{font-size:15px;font-weight:400;letter-spacing:.12em;color:var(--paper);
     flex:0 0 auto;white-space:nowrap}
+  /* 英文名宁可折行也别截成 “ANDROMEDA GAL…” */
   #card .ch em{font-style:normal;font-family:"JetBrains Mono",monospace;font-size:8.5px;
-    min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-    letter-spacing:.22em;color:var(--faint)}
+    min-width:0;white-space:normal;word-break:break-word;line-height:1.5;
+    letter-spacing:.18em;color:var(--faint)}
   #card .mt{margin-top:9px;font-family:"JetBrains Mono",monospace;font-size:9.5px;
     letter-spacing:.1em;color:var(--dim);display:flex;flex-wrap:wrap;gap:4px 12px;
     padding-bottom:9px;border-bottom:1px solid rgba(235,231,223,.10)}
@@ -226,11 +336,20 @@
   #hint{position:absolute;left:50%;transform:translateX(-50%);bottom:clamp(74px,10.5vh,116px);
     font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.18em;color:var(--faint);
     transition:opacity .8s;white-space:nowrap;max-width:92vw;text-align:center}
+  /* 落地后"已对准某某"的短提示（独立于 #hint，不会被主循环改写） */
+  #toast{position:absolute;left:50%;top:clamp(84px,10.6vh,124px);transform:translate(-50%,-4px);
+    font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.16em;color:var(--dim);
+    padding:7px 16px;border:1px solid rgba(235,231,223,.13);border-radius:999px;
+    background:rgba(9,12,20,.55);backdrop-filter:blur(8px);pointer-events:none;
+    opacity:0;transition:opacity .6s var(--ease),transform .6s var(--ease)}
+  #toast.on{opacity:.92;transform:translate(-50%,0)}
 
   /* 窄屏 / 小窗口 */
   @media (max-width: 860px){
     /* 窄屏：清单挪到左下角，别压在星空中央 */
     #panel{width:min(224px,58vw);top:auto;bottom:clamp(96px,14vh,140px);left:16px;right:auto}
+    #panel .tab{font-size:8px;letter-spacing:.04em;padding:5px 1px}
+    #tabs .tnav{flex:0 0 17px}
     .row{grid-template-columns:8px 1fr 44px;gap:8px}
     .row .nm{font-size:12px}
     .row .nm small{display:none}
@@ -246,6 +365,17 @@
     #hint{font-size:9px;letter-spacing:.1em;white-space:normal;bottom:clamp(96px,13vh,132px)}
     #card{width:206px;padding:11px 13px 12px;max-height:54vh}
     #card p{font-size:10.5px;line-height:1.7}
+    /* 特写 HUD 在竖屏上收一档，并在底部垫一层渐隐，文字压在盘面上也读得清 */
+    #sunHud .back{left:12px;top:12px;padding:6px 12px;font-size:9px}
+    #sunHud .back i{font-size:12px}
+    #sunHud .meta{left:0;right:0;bottom:0;max-width:none;padding:26px 16px 18px;
+      background:linear-gradient(to top,rgba(2,4,10,.86) 26%,rgba(2,4,10,.42) 68%,rgba(2,4,10,0))}
+    #sunHud h2{font-size:21px;margin:5px 0 1px}
+    #sunHud .kick{font-size:8px}
+    #sunHud .stats{margin-top:9px;gap:3px 14px;font-size:8.5px}
+    #sunHud .note{margin-top:9px;font-size:9.5px;line-height:1.65;max-width:none}
+    #sunHud .src{font-size:7px;letter-spacing:.1em}
+    #sunHud .say{right:12px;top:12px;bottom:auto;padding:6px 13px;font-size:9px}
   }
 </style>
 </head>
@@ -256,10 +386,16 @@
   <h1>星野</h1>
   <div class="sub">Solar System · Seen From Earth</div>
   <div class="note">以地球为眼，看太阳与七颗行星此刻的位置</div>
+  <div class="probe">
+    <span id="stGeo"><i id="stGeoDot"></i><b id="stGeoTxt">定位中…</b></span>
+    <span id="stTime"><i id="stTimeDot"></i><b id="stTimeTxt">校时中…</b></span>
+  </div>
   <button id="enter">入 夜</button>
   <div class="tip">拖拽转天 · 滚轮推时 · Ctrl+滚轮缩放 · 点清单可对准某颗</div>
   <div class="err" id="bootErr"></div>
 </div>
+
+<audio id="bgm" src="assets/night-ambience.mp4" loop preload="auto"></audio>
 
 <div class="hud" id="hud">
   <div class="brand">
@@ -271,20 +407,33 @@
     <div class="pill on" id="btnLabel">标签</div>
     <div class="pill on" id="btnEcl">黄道</div>
     <div class="pill on" id="btnConst">星座</div>
-    <div class="pill" id="btnTour">演示</div>
+    <div class="tourwrap">
+      <div class="pill" id="btnTour">演示 <i class="car">▾</i></div>
+      <div id="tourMenu">
+        <div class="tm" data-k="sys"><b>系统演示</b><i>黄道 · 星座 · 行星 · 岁差</i></div>
+        <div class="tm" data-k="light"><b>光走了多久</b><i>4.4 光年 → 24 亿光年</i></div>
+      </div>
+    </div>
     <div class="pill" id="btnInfo">黄道科普</div>
+    <div class="pill on" id="btnBgm">夜曲</div>
     <div class="pill" id="btnGeo">定位</div>
     <div class="pill" id="btnNow">现在</div>
   </div>
 
   <div id="panel">
     <div class="tabs" id="tabs">
-      <div class="tab on" data-t="body">太阳系</div>
-      <div class="tab" data-t="const">黄道十二星座</div>
+      <div class="tnav" id="tabL" title="上一组">‹</div>
+      <div id="tabWrap">
+        <div class="tab on" data-t="body">太阳系</div>
+        <div class="tab" data-t="const">十二星座</div>
+        <div class="tab" data-t="stars">群星</div>
+      </div>
+      <div class="tnav" id="tabR" title="下一组">›</div>
     </div>
     <div class="hd" id="panelHd"><span>天体</span><span>高度 · 星等</span></div>
     <div id="rows"></div>
     <div id="rowsConst"></div>
+    <div id="rowsStars"></div>
   </div>
 
   <div class="bottom">
@@ -297,10 +446,12 @@
       <div class="s on" data-k="1">1×</div>
       <div class="s" data-k="60">60×</div>
       <div class="s" data-k="3600">1 时/秒</div>
+      <div class="s reset" id="btnReset" title="回到入场时抬望眼的位置">还原</div>
     </div>
   </div>
 
   <div id="hint">拖拽转视角 · 滚轮推进时间 · Ctrl+滚轮缩放视场 · 点清单对准某颗星</div>
+  <div id="toast"></div>
   <div id="compass"><div class="dial"><div class="ticks" id="ticks"></div><div class="needle"></div></div><div class="hdg" id="hdg">—</div></div>
   <div id="zoom">视场 58°</div>
 </div>
@@ -316,6 +467,29 @@
   </div>
   <div class="td" id="tourText">—</div>
   <div class="track"><i id="tourProg"></i></div>
+</div>
+
+<div id="sunFlash"></div>
+<div id="sunHud">
+  <div class="back" id="sunBack"><i>‹</i>返回星野</div>
+  <div class="say" id="shSay"><i>♪</i><span>讲解</span></div>
+  <div class="meta">
+    <div class="kick" id="shKick">SOL · G2V · 46 亿年</div>
+    <h2 id="shTitle">太阳</h2>
+    <div class="en" id="shEn">THE SUN</div>
+    <div class="stats" id="shStats"></div>
+    <div class="note" id="shNote"></div>
+    <div class="src" id="shSrc"></div>
+  </div>
+</div>
+
+<div id="tourEnd">
+  <div class="box">
+    <div class="kick">DEMO · END</div>
+    <h2>演示结束</h2>
+    <p>星空已交还给你。<br>你可以继续拖拽转天、点清单对准某颗，或调快时间看斗转。</p>
+    <div class="btns"><span id="tourAgain">再看一遍</span><span id="tourDone">回到星野</span></div>
+  </div>
 </div>
 
 <div id="info">
@@ -356,7 +530,8 @@
 <div id="card"><div class="ch"><i id="cardDot"></i><b id="cardName">—</b><em id="cardEn">—</em></div>
   <div class="mt"><span id="cardDia">—</span><span id="cardDist">—</span></div>
   <p id="cardDesc">—</p>
-  <div class="note hide" id="cardNote"></div></div>
+  <div class="note hide" id="cardNote"></div>
+  <div class="go" id="cardGo"><i>◎</i>查看细节</div></div>
 
 <script>
   // 普通 script 里装错误钩子：模块语法错误也能显示出来
@@ -381,6 +556,7 @@ import * as THREE from 'three';
 import { EffectComposer } from './jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from './jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from './jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from './jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from './jsm/postprocessing/OutputPass.js';
 
 /* ------------------------------------------------------------------ 常量 */
@@ -461,15 +637,26 @@ function buildCatalog(n) {
   const m0 = -1.5, m1 = 7.4;
   const k = 0.45;
   const A = Math.pow(10, k * m0), B = Math.pow(10, k * m1) - A;
+  // 银道面聚集：真实夜空里银纬 |b|<10° 的星数远多于极区，
+  // 银河"细砂"质感靠的就是这层没被分解的暗星，光靠 shader 画雾是画不出来的
+  const gp = new THREE.Vector3(
+    Math.cos(POLE_DEC) * Math.cos(POLE_RA), Math.cos(POLE_DEC) * Math.sin(POLE_RA), Math.sin(POLE_DEC));
+  const GAL_B = 0.34, GAL_MIN = 0.26;
   for (let i = 0; i < n; i++) {
-    const ra = Math.random() * Math.PI * 2;
-    const dec = Math.asin(Math.random() * 2 - 1);
+    let ra, dec, dx, dy, dz, sb;
+    do {
+      ra = Math.random() * Math.PI * 2;
+      dec = Math.asin(Math.random() * 2 - 1);
+      dx = Math.cos(dec) * Math.cos(ra); dy = Math.cos(dec) * Math.sin(ra); dz = Math.sin(dec);
+      sb = dx * gp.x + dy * gp.y + dz * gp.z;                 // sin(银纬)
+      const b = Math.asin(Math.max(-1, Math.min(1, sb)));
+      const pAccept = GAL_MIN + (1 - GAL_MIN) * Math.exp(-(b * b) / (GAL_B * GAL_B));
+      if (Math.random() < pAccept) break;
+    } while (true);
     const m = (1 / k) * Math.log10(A + Math.random() * B);
     const bv = Math.max(-0.4, Math.min(2.0, randn() * 0.55 - 0.08));
     const rgb = bvToRGB(bv);
-    dir[i * 3] = Math.cos(dec) * Math.cos(ra);
-    dir[i * 3 + 1] = Math.cos(dec) * Math.sin(ra);
-    dir[i * 3 + 2] = Math.sin(dec);
+    dir[i * 3] = dx; dir[i * 3 + 1] = dy; dir[i * 3 + 2] = dz;
     color[i * 3] = rgb[0]; color[i * 3 + 1] = rgb[1]; color[i * 3 + 2] = rgb[2];
     mag[i] = m;
     seed[i] = Math.random();
@@ -549,26 +736,75 @@ vec3 skyBase(vec3 d, float t){
   col += vec3(0.32, 0.14, 0.05) * exp(-pow((az - 0.95) / 0.38, 2.0)) * exp(-a * 18.0) * 0.18;
   return col;
 }
-vec3 milky(vec3 e, float g){
+/* 银河：在银道"角域"（银经 l、银纬 b）里做多尺度噪声。
+   旧版直接拿 b.xy 当噪声域，尺度不是角度、一放大就糊；这里换成角域 +
+   按视场加细节（越推近，细丝/星团越多），并保留脊状尘埃带的锐度。 */
+float mfbm3(vec2 p){ float v=0.0,a=0.55; for(int i=0;i<3;i++){ v+=a*vnoise(p); p=p*2.03+7.31; a*=0.5; } return v; }
+float mfbm4(vec2 p){ float v=0.0,a=0.55; for(int i=0;i<4;i++){ v+=a*vnoise(p); p=p*2.03+7.31; a*=0.5; } return v; }
+float mfbm5(vec2 p){ float v=0.0,a=0.55; for(int i=0;i<5;i++){ v+=a*vnoise(p); p=p*2.03+7.31; a*=0.5; } return v; }
+/* 脊状噪声：给尘埃带和电离氢细丝那种"线条感"，比普通 fbm 锐得多 */
+float mridge3(vec2 p){ float v=0.0,a=0.62; for(int i=0;i<3;i++){ float n=vnoise(p); v+=a*(1.0-abs(n*2.0-1.0)); p=p*2.11+11.7; a*=0.55; } return v; }
+
+vec3 milky(vec3 e, float g, float detail, float zoom){
   vec3 b = uEqToGal * e;
-  float bb = asin(clamp(b.z, -1.0, 1.0));
-  float l = atan(b.y, b.x);
+  float bb = asin(clamp(b.z, -1.0, 1.0));      // 银纬（rad）
+  float l  = atan(b.y, b.x);                    // 银经（rad，±π 处是反银心）
   float center = 0.5 + 0.5 * cos(l);
   float c2 = center * center;
-  float width = mix(0.07, 0.19, c2);
-  float warp = fbm(b.xy * 2.3 + vec2(0., 1.3)) - 0.5;
-  bb += warp * 0.055;
-  float band = exp(-bb*bb / (2.0 * width * width));
-  float broad = exp(-bb*bb / (2.0*0.3*0.3)) * 0.12;
-  float clouds = 0.5 + 0.5 * fbm(b.xy * 4.6 + vec2(2.0));
-  float fine = 0.62 + 0.38 * fbm(b.xy * 15.0 + vec2(5.0));
-  float laneN = fbm(b.xy * 7.2 + vec2(9.0));
-  float lane = smoothstep(0.45, 0.9, laneN) * exp(-pow(bb / (width * 0.5), 2.0));
-  float I = (band * clouds * fine + broad) * (0.26 + 0.95 * c2 + 0.2 * center);
-  I *= (1.0 - 0.82 * lane);
-  // 软饱和：银河是"一层薄雾"，无论多靠近银心都封顶，避免烧成白光
-  I = 0.62 * (1.0 - exp(-I * 1.35));
-  vec3 col = mix(vec3(0.40, 0.50, 0.88), vec3(1.0, 0.84, 0.66), smoothstep(0.15, 0.95, center) * band);
+  float edge = smoothstep(2.35, 3.05, abs(l));   // 反银心侧淡掉细节 + 抹掉接缝
+
+  // 角域坐标：沿银经稍拉长（旋臂本来就是纵向成条的）
+  vec2 q = vec2(l * 0.85, bb * 1.35);
+
+  float width = mix(0.070, 0.165, c2);
+  float wob = (mfbm3(q * 0.55 + 2.4) - 0.5) * 0.050;   // 中轴被低频掰弯
+  float bbw = bb - wob;
+  float band = exp(-bbw * bbw / (2.0 * width * width));
+  float halo = exp(-bbw * bbw / (2.0 * 0.30 * 0.30)) * 0.075;   // 外层晕收一点，少点"烟"
+
+  // 视场越窄，噪声域越放大 → 同一片天能看到更细的结构（推近不糊的关键）
+  float zo = clamp(58.0 / max(zoom, 6.0), 1.0, 5.0);
+
+  // 云团：中层结构（尺度固定在角度上）
+  float c1  = mfbm5(vec2(q.x * 2.2, q.y * 4.0) * (1.0 + (zo - 1.0) * 0.5 * detail) + 1.9);
+  float c2n = mfbm4(vec2(q.x * 6.0, q.y * 9.0) + 5.5);
+  float cloud = (0.34 + 0.66 * c1) * (0.62 + 0.42 * c2n);
+  cloud = clamp((cloud - 0.42) * 1.9 + 0.42, 0.0, 1.9);      // 提对比：亮星云/暗缝隙分开
+
+  // 高频层：只在推近时才明显
+  float d1 = mfbm4(vec2(q.x * 9.0, q.y * 13.0) * zo + 21.7);
+  float d2 = mfbm3(vec2(q.x * 23.0, q.y * 31.0) * zo + 31.3);
+  cloud *= 1.0 + ((d1 - 0.5) * 1.05 + (d2 - 0.5) * 0.85) * mix(0.40, 1.15, detail);
+  cloud = mix(cloud, 0.66, edge * 0.85);
+
+  // 暗尘埃带：脊状噪声 + 高阈值，出来的才是"带边界的黑缝"而不是灰雾
+  float laneA = mridge3(vec2(q.x * 4.5, q.y * 7.0) + 3.3);
+  float lane  = smoothstep(0.54, 0.90, laneA) * exp(-pow(bbw / (width * 0.55), 2.0)) * (0.50 + 0.50 * c2);
+  float lane2 = smoothstep(0.66, 0.95, mfbm3(vec2(q.x * 10.0, q.y * 14.0) + 8.8))
+                * exp(-pow(bbw / (width * 0.34), 2.0)) * detail;
+  // 细尘埃纤维：推近时补的锐度，让暗带不是一条平涂的灰带
+  float fil = mridge3(vec2(q.x * 17.0, q.y * 23.0) * zo + 41.0);
+  lane += smoothstep(0.58, 0.96, fil) * 0.45 * detail * exp(-pow(bbw / (width * 1.1), 2.0));
+  lane  = mix(lane,  0.0, edge * 0.9);
+  lane2 = mix(lane2, 0.0, edge * 0.9);
+
+  float I = (band * cloud + halo) * (0.24 + 1.00 * c2 + 0.16 * center);
+  I *= (1.0 - 0.85 * lane - 0.45 * lane2);
+
+  // 细颗粒：高频小幅调制。真银河照片的"质感"就来自这层颗粒，而不是一团平滑的雾
+  float grain = mfbm3(q * 22.0 * (0.6 + 0.7 * zoom / 58.0) + 13.0);
+  I *= 0.90 + 0.20 * grain;
+  // 屏幕空间颗粒（1 像素级）：银河"细砂"质感的来源，纯域噪声做不出来
+  float pg = hash21(gl_FragCoord.xy * 0.7 + 3.1);
+  I *= 0.88 + 0.26 * pg;
+
+  // 软饱和：压到"薄雾"这个量级，不烧成白团
+  I = 0.38 * (1.0 - exp(-I * 1.65));
+
+  vec3 cool = vec3(0.36, 0.47, 0.92);
+  vec3 warm = vec3(1.00, 0.86, 0.70);
+  vec3 col  = mix(cool, warm, smoothstep(0.10, 0.95, center) * band);
+  col = mix(col, vec3(0.52, 0.58, 0.95), 0.16 * laneA * band);   // 尘埃带偏冷蓝紫
   return col * I * g;
 }
 `;
@@ -605,8 +841,11 @@ const skyMat = new THREE.ShaderMaterial({
       vec3 col = skyBase(d, uTime);
       vec3 e = uSkyInv * d;
       float ext = exp(-0.22 * (airmass(d.y) - 1.0));
-      float mwFov = mix(0.55, 1.0, smoothstep(12.0, 42.0, uFov));
-      col += milky(e, uMilkyGain) * 0.80 * mwFov * smoothstep(5.2, 8.0, uLimitMag + 0.0) * ext
+      // 推近时同一片天空铺满全屏，必须压一点亮度，否则整块发白
+      float mwFov = mix(1.0, 0.52, smoothstep(40.0, 12.0, uFov));
+      float detail = mix(0.30, 1.0, smoothstep(46.0, 12.0, uFov));
+      col += milky(e, uMilkyGain, detail, uFov) * 0.85 * mwFov
+             * smoothstep(5.2, 8.0, uLimitMag + 0.0) * ext
              * smoothstep(-0.02, 0.06, d.y);
       // 日间：太阳在地平以上时，天空被天光整体提亮（视觉上不是"黑天挂太阳"）
       // 本页是"夜空观测"模式：白天只留一层很淡的天光，不把画面洗成白雾
@@ -685,7 +924,7 @@ scene.add(stars);
 
 
 /* ------------------------------------------------------------ 远山剪影 */
-function makeRidge(radius, baseH, amp, seed, colorA, colorB) {
+function makeRidge(radius, baseH, amp, seed, colorA, colorB, opacity) {
   const COLS = 384;
   const pos = [], hAttr = [], idx = [];
   // 用整数频次的三角级数，保证 0/2π 接缝连续
@@ -721,6 +960,7 @@ function makeRidge(radius, baseH, amp, seed, colorA, colorB) {
       uColorB: { value: new THREE.Color(colorB) },
       uReveal: U.uReveal,
       uTime: U.uTime,
+      uOpacity: { value: opacity === undefined ? 1.0 : opacity },
     },
     vertexShader: /* glsl */`
       attribute float aH; varying float vH; varying vec3 vWorld;
@@ -733,13 +973,13 @@ function makeRidge(radius, baseH, amp, seed, colorA, colorB) {
     fragmentShader: /* glsl */`
       precision highp float;
       varying float vH; varying vec3 vWorld;
-      uniform vec3 uColorA, uColorB; uniform float uReveal, uTime;
+      uniform vec3 uColorA, uColorB; uniform float uReveal, uTime, uOpacity;
       void main(){
         float n = 0.85 + 0.15 * sin(vWorld.x * 0.02 + uTime * 0.05) * cos(vWorld.z * 0.017);
         vec3 col = mix(uColorA, uColorB, smoothstep(0.0, 1.0, vH)) * n;
         float horizon = smoothstep(-6.0, 34.0, vWorld.y);
         col += vec3(0.05, 0.06, 0.10) * (1.0 - horizon) * 0.55;
-        gl_FragColor = vec4(col * uReveal, 1.0);
+        gl_FragColor = vec4(col * uReveal * uOpacity, 1.0);
         #include <colorspace_fragment>
       }`,
   });
@@ -747,18 +987,27 @@ function makeRidge(radius, baseH, amp, seed, colorA, colorB) {
   mesh.frustumCulled = false;
   return mesh;
 }
-scene.add(makeRidge(520, 34, 120, 3, '#02040a', '#080c16'));
-scene.add(makeRidge(340, 14, 72, 11, '#03050c', '#0a0f1c'));
-scene.add(makeRidge(215, 2, 36, 29, '#04060e', '#0c1220'));
+// 极淡远山：只留地平线上一点起伏，压住草原的天际线（约 6% 对比度）
+scene.add(makeRidge(1500, 6, 22, 3, '#05070d', '#0a1018', 0.34));
 
 
-/* ------------------------------------------------------------ 水面映射 */
+/* -------------------------------------------------------------- 草原地面 */
+/*
+ * 原方案是"三层远山 + 湖泊倒影"。草原要的是另一种真实：
+ * 一块平的、能一直铺到地平线的地面 —— 相机的"高度"于是有了真实含义
+ * （y 从 150 落到 3 时，几何地平线自己会抬起来），不需要任何假动画。
+ */
+const GROUND_R = 2600;
 (() => {
-  const g = new THREE.CircleGeometry(640, 96, 0, Math.PI * 2);
+  const g = new THREE.CircleGeometry(GROUND_R, 128, 0, Math.PI * 2);
   g.rotateX(-Math.PI / 2);
   const m = new THREE.ShaderMaterial({
     transparent: true,
-    uniforms: { ...U, uEqToGal: { value: galacticMatrix() }, uSkyInv: U.uSkyInv },
+    uniforms: {
+      ...U,
+      uFogCol: { value: new THREE.Vector3(0.0272, 0.0352, 0.0452) },
+      uGroundR: { value: GROUND_R },
+    },
     vertexShader: /* glsl */`
       varying vec3 vWorld;
       void main(){
@@ -769,41 +1018,636 @@ scene.add(makeRidge(215, 2, 36, 29, '#04060e', '#0c1220'));
     fragmentShader: /* glsl */`
       precision highp float;
       varying vec3 vWorld;
-      uniform mat3 uSkyInv, uEqToGal; uniform float uTime, uReveal, uLimitMag, uMilkyGain, uVoice;
+      uniform float uTime, uReveal, uGroundR;
+      uniform vec3 uFogCol;
       ${GLSL_NOISE}
-      ${GLSL_SKYBASE}
       void main(){
-        vec3 V = normalize(vWorld - cameraPosition);
-        // 镜像方向（法线朝上）
-        vec3 R = vec3(V.x, -V.y, V.z);
-        float alt = clamp(-V.y, 0.0, 1.0);
         vec2 p = vWorld.xz;
-        float ripple = vnoise(vec2(p.x * 0.05, p.y * 0.16 + uTime * 0.20)) - 0.5;
-        R.x += ripple * 0.035 * (1.0 + uVoice * 0.7);
-        R.z += ripple * 0.020;
-        R.y = max(R.y, 0.10);
-        vec3 col = skyBase(normalize(R), uTime);
-        vec3 e = uSkyInv * normalize(R);
-        col += milky(e, uMilkyGain) * 0.30 * mix(0.55, 1.0, smoothstep(12.0, 42.0, uFov)) * smoothstep(5.2, 8.0, uLimitMag);
-        float d = length(vWorld.xz) / 640.0;
-        float fade = smoothstep(1.0, 0.35, d) * smoothstep(0.0, 0.25, alt);
-        gl_FragColor = vec4(col * fade * 0.34 * uReveal, 1.0);
+        float n1 = fbm(p * 0.0042);          // 大尺度地块明暗
+        float n2 = fbm(p * 0.085);           // 草皮颗粒
+        float n3 = vnoise(p * 0.42);         // 极细噪点，防"塑料平面"
+        float tuft = vnoise(p * 2.4) * vnoise(p * 7.1);     // 草簇：中近景的颗粒感
+        vec3 dark  = vec3(0.0118, 0.0192, 0.0150);
+        vec3 lit   = vec3(0.0245, 0.0368, 0.0288);
+        vec3 col = mix(dark, lit, clamp(n1 * 0.78 + n2 * 0.30 + tuft * 0.22, 0.0, 1.0));
+        col *= 0.78 + 0.22 * n3;
+        // 远处融进天际雾：避免出现"一堵绿墙"的硬边
+        float r = length(p) / uGroundR;
+        col = mix(col, uFogCol, smoothstep(0.07, 0.46, r));
+        // 掠射角上的一点星光反照（代替原来的水面镜面，强度只有 1/3）
+        float down = -normalize(vWorld - cameraPosition).y;
+        float graze = 1.0 - smoothstep(0.03, 0.34, down);
+        col += vec3(0.0130, 0.0170, 0.0245) * graze * 0.38;
+        // 圆盘边界：高空俯视时圆盘会露出一个"弧形山包"，用高度驱动的淡出抹掉；
+        // 站在地面上（camH≈3）时几乎不淡出，地平线保持清晰
+        float fadeStart = mix(0.998, 0.40, smoothstep(5.0, 130.0, cameraPosition.y));
+        float edge = 1.0 - smoothstep(fadeStart, 1.0, r);
+        gl_FragColor = vec4(col * uReveal, edge * uReveal);
         #include <colorspace_fragment>
       }`,
   });
-  const water = new THREE.Mesh(g, m);
-  water.position.y = -0.2;
-  water.frustumCulled = false;
-  scene.add(water);
+  const ground = new THREE.Mesh(g, m);
+  ground.position.y = 0;
+  ground.frustumCulled = false;
+  scene.add(ground);
+})();
+
+
+/* ------------------------------------------------------------ 近景草叶 */
+/*
+ * 8000 株交叉双面片（移动端 3000），撒在相机周围 2–26 的环带里。
+ * 顶点着色器按株相位做风摆，片元按 uv 做"上尖下宽"的刀形裁切 —— 不依赖贴图。
+ */
+const grassBlades = (() => {
+  const COUNT = (window.innerWidth <= 860 || window.devicePixelRatio > 2.5) ? 9000 : 24000;
+  const pos = [], uvA = [], phaseA = [], tintA = [], idx = [];
+  let vi = 0;
+  let seed = 987654321;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < COUNT; i++) {
+    // 半径用 sqrt 分布 → 近处更密（远处的草叶本来就被像素吃掉了）
+    // 两圈：近处 2–22 密集，远处 22–58 稀疏（抬望眼时脚前那片也是草，不是平板）
+    const rad = rnd() < 0.62 ? (1.8 + Math.sqrt(rnd()) * 20.2) : (22 + rnd() * 36);
+    const ang = rnd() * Math.PI * 2;
+    const x = Math.cos(ang) * rad, z = Math.sin(ang) * rad;
+    const h = 0.30 + Math.pow(rnd(), 2.0) * 1.05;
+    const w = 0.045 + rnd() * 0.055;
+    const rot = rnd() * Math.PI;
+    const cs = Math.cos(rot), sn = Math.sin(rot);
+    const ph = rnd() * 6.283, tint = rnd();
+    const quads = [
+      [[-0.5, 0, 0], [0.5, 0, 0], [0.5, 1, 0], [-0.5, 1, 0]],
+      [[0, 0, -0.5], [0, 0, 0.5], [0, 1, 0.5], [0, 1, -0.5]],
+    ];
+    for (const q of quads) {
+      const base = vi;
+      for (const v of q) {
+        const lx = v[0] * w, ly = v[1] * h, lz = v[2] * w;
+        pos.push(x + lx * cs - lz * sn, ly, z + lx * sn + lz * cs);
+        uvA.push((v[0] !== 0 ? v[0] : v[2]) + 0.5, v[1]);
+        phaseA.push(ph);
+        tintA.push(tint);
+        vi++;
+      }
+      idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setIndex(idx);
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uvA), 2));
+  g.setAttribute('aPhase', new THREE.BufferAttribute(new Float32Array(phaseA), 1));
+  g.setAttribute('aTint', new THREE.BufferAttribute(new Float32Array(tintA), 1));
+  const m = new THREE.ShaderMaterial({
+    side: THREE.DoubleSide,
+    uniforms: { uTime: U.uTime, uReveal: U.uReveal },
+    vertexShader: /* glsl */`
+      attribute float aPhase, aTint;
+      varying vec2 vUv; varying float vTint;
+      uniform float uTime;
+      void main(){
+        vUv = uv; vTint = aTint;
+        vec3 p = position;
+        float sway = sin(uTime * 1.15 + aPhase) * 0.085 + sin(uTime * 2.60 + aPhase * 1.7) * 0.026;
+        p.xz += vec2(sway, sway * 0.55) * uv.y * uv.y;   // 越靠草尖摆幅越大
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+      }`,
+    fragmentShader: /* glsl */`
+      precision highp float;
+      varying vec2 vUv; varying float vTint;
+      uniform float uReveal;
+      void main(){
+        float halfW = 0.5 * (1.0 - pow(vUv.y, 1.45));       // 上尖下宽
+        if (abs(vUv.x - 0.5) > halfW) discard;
+        vec3 base = mix(vec3(0.0165, 0.0300, 0.0215), vec3(0.0300, 0.0490, 0.0340), vTint);
+        base *= 0.50 + 1.05 * vUv.y;                        // 草尖更亮，像接住了星光
+        gl_FragColor = vec4(base * uReveal, 1.0);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const mesh = new THREE.Mesh(g, m);
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  return mesh;
 })();
 
 
 /* ------------------------------------------------------------ 后期处理 */
 const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.70, 0.55, 0.22);
 composer.addPass(bloom);
+
+/* 星光飞逝：沿画面中心方向的径向模糊。点精灵没法拉长，就整帧抹出速度感 */
+const WARP = { value: 0 };
+const WarpShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uWarp: WARP,
+    uCenter: { value: new THREE.Vector2(0.5, 0.52) },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`
+    precision highp float;
+    varying vec2 vUv;
+    uniform sampler2D tDiffuse;
+    uniform float uWarp;
+    uniform vec2 uCenter;
+    void main(){
+      float s = uWarp * 0.105;
+      if (s < 0.0012) { gl_FragColor = texture2D(tDiffuse, vUv); return; }
+      vec2 dir = vUv - uCenter;
+      vec3 acc = vec3(0.0);
+      float wsum = 0.0;
+      for (int i = 0; i < 24; i++) {
+        float f = float(i) / 23.0;
+        float w = 1.0 - f * 0.72;                  // 越靠近当前位置权重越大，尾巴自然变淡
+        vec2 uv = vUv - dir * (f * s);
+        acc += texture2D(tDiffuse, clamp(uv, vec2(0.0008), vec2(0.9992))).rgb * w;
+        wsum += w;
+      }
+      gl_FragColor = vec4(acc / wsum, 1.0);
+    }`,
+};
+const warpPass = new ShaderPass(WarpShader);
+// ShaderPass 会 clone uniforms，必须把 uWarp 换回同一个对象引用，否则 WARP.value 改了不生效
+warpPass.uniforms.uWarp = WARP;
+composer.addPass(warpPass);
+
 composer.addPass(new OutputPass());
+
+/* ------------------------------------------------------------ 太阳特写 */
+/*
+ * 点太阳不再是"弹张卡片就完事"：给这颗星开一台单独的相机、一个单独的场景。
+ * 云团级的米粒组织 + 临边昏暗 + 外圈日冕，全部在片元里算，
+ * 1 个球 + 1 张日冕片，没有贴图，也没有第二条后期链（复用同一个 composer）。
+ */
+const viewScene = new THREE.Scene();
+const viewCam = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 120);
+const SUN_DIST = 2.55;
+viewCam.position.set(0, 0, SUN_DIST);
+
+const sunUni = { uTime: { value: 0 }, uPulse: { value: 1 } };
+
+const sunMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(1, 96, 64),
+  new THREE.ShaderMaterial({
+    uniforms: sunUni,
+    vertexShader: /* glsl */`
+      varying vec3 vPos; varying vec3 vN; varying vec3 vV;
+      void main(){
+        vPos = position;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vN = normalize(normalMatrix * normal);
+        vV = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */`
+      precision highp float;
+      varying vec3 vPos; varying vec3 vN; varying vec3 vV;
+      uniform float uTime; uniform float uPulse;
+
+      float h31(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+      float n31(vec3 p){
+        vec3 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(
+          mix(mix(h31(i),               h31(i + vec3(1,0,0)), f.x),
+              mix(h31(i + vec3(0,1,0)), h31(i + vec3(1,1,0)), f.x), f.y),
+          mix(mix(h31(i + vec3(0,0,1)), h31(i + vec3(1,0,1)), f.x),
+              mix(h31(i + vec3(0,1,1)), h31(i + vec3(1,1,1)), f.x), f.y), f.z);
+      }
+      float fbm3(vec3 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * n31(p); p *= 2.07; a *= 0.5; } return s; }
+
+      void main(){
+        vec3 n = normalize(vPos);
+        float mu = clamp(dot(normalize(vN), normalize(vV)), 0.0, 1.0);
+
+        // 米粒组织：两层不同尺度、各自缓慢演化的噪声，叠出来才有"翻滚"感
+        float g1 = fbm3(n * 16.0 + vec3(0.0, 0.0, uTime * 0.07));
+        float g2 = fbm3(n * 38.0 - vec3(uTime * 0.06, 0.0, uTime * 0.04));
+        float gran = mix(g1, g2, 0.50);
+
+        // 大尺度对流：亮斑与暗区，让球面不是一块均质的橙
+        float cell = fbm3(n * 3.2 + vec3(uTime * 0.012, uTime * 0.008, 0.0));
+        float heat = smoothstep(0.34, 0.86, gran * 0.8 + cell * 0.55);
+
+        vec3 deep = vec3(0.34, 0.055, 0.008);
+        vec3 mid  = vec3(1.00, 0.31, 0.035);
+        vec3 hot  = vec3(1.90, 1.50, 1.02);
+        vec3 col = mix(deep, mid, smoothstep(0.10, 0.68, gran));
+        col = mix(col, hot, pow(heat, 2.2) * 1.0);
+
+        // 米粒之间的暗缝：把 granule 边界压暗，才看得出"细胞"结构
+        float lane = mix(0.44, 1.0, smoothstep(0.40, 0.72, gran));
+        col *= lane;
+
+        // 临边昏暗：靠边缘只剩 1/5 亮度，才像一颗球而不是一个圆片
+        float limb = 0.16 + 0.84 * pow(mu, 1.15);
+        col *= limb;
+        col += vec3(1.0, 0.36, 0.07) * pow(1.0 - mu, 4.0) * 0.9;   // 边缘一圈散射亮边
+
+        col *= 1.0 * uPulse;
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+  })
+);
+viewScene.add(sunMesh);
+
+const coronaMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: sunUni.uTime },
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`
+    precision highp float;
+    varying vec2 vUv;
+    uniform float uTime;
+    float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float n2(vec2 p){
+      vec2 i = floor(p), f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(h2(i), h2(i + vec2(1,0)), f.x), mix(h2(i + vec2(0,1)), h2(i + vec2(1,1)), f.x), f.y);
+    }
+    float fbm2(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { s += a * n2(p); p *= 2.05; a *= 0.5; } return s; }
+    void main(){
+      vec2 p = vUv - 0.5;
+      float rw = length(p) * 10.0;            // 世界半径，太阳半径 = 1
+      float ang = atan(p.y, p.x);
+      float wisps = fbm2(vec2(ang * 3.0, rw * 0.85 - uTime * 0.05));
+      float rays  = fbm2(vec2(ang * 11.0, rw * 1.7 + uTime * 0.02));
+      float rim   = exp(-pow((rw - 1.0) * 2.2, 2.0));            // 贴着球面的一圈亮边
+      float outer = smoothstep(3.4, 1.0, rw);                    // 3 个半径外彻底归零，留黑背景
+      float glow  = rim * 0.90
+                  + (rays * 0.55 + wisps * 0.45) * outer * exp(-(rw - 1.0) * 1.1) * 0.42;
+      vec3 c = mix(vec3(1.0, 0.36, 0.05), vec3(1.0, 0.74, 0.36), rim);
+      gl_FragColor = vec4(c * glow, 1.0);
+    }`,
+});
+const sunCorona = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), coronaMat);
+sunCorona.frustumCulled = false;
+viewScene.add(sunCorona);
+
+/* --------------------------------------------- 打算细看的九颗：参数与实数 */
+/*
+ * 特写里的参数全部有出处：
+ *   直径 / 距日 / 自转 / 倾角 / 温度 / 卫星数 —— NASA NSSDCA Planetary Fact Sheet（2025-03 更新）
+ *   表面反照图 —— Solar System Scope（CC BY 4.0，要求署名，见每张 HUD 的 src 行）
+ * dist 是以"行星半径 = 1"为单位的相机距离，只影响构图（球都按半径 1 建模）。
+ */
+const PLANET_VIEWS = {
+  sun: { proc: true,
+    say:'太阳是太阳系唯一的恒星，直径约 140 万公里，装得下 130 万个地球。核心温度约 1500 万度，氢在这里聚变成氦，光要 8 分 20 秒才能到地球。它已经燃烧了 46 亿年，还有大约 50 亿年的壮年。', audio:'assets/audio/sun.wav', kick:'SOL · G2V · 46 亿年', title:'太阳', en:'THE SUN', dist:2.55, fov:50,
+    stats:[['直径','1,392,700 km · 109 个地球'],['质量','占太阳系 99.86%'],['表面温度','约 5,500 ℃'],
+           ['核心温度','约 1,500 万 ℃'],['距地','1.496 亿 km · 光走 8 分 20 秒']],
+    note:'每秒约 6 亿吨氢聚变成氦，质量以光和热的形式向外辐射。你看到的这层「火」，是 5,500 ℃ 的等离子体在对流翻滚。' },
+
+  moon: { map:'assets/planets/moon.jpg', tint:[1.0,0.99,0.96], atm:[0,0,0], atmK:0, obl:6.7, rot:655.7, rot0:-Math.PI/2, dist:2.75,
+    kick:'MOON · 地球唯一天然卫星',
+    say:'月球是地球唯一的天然卫星，直径 3475 公里，大约是地球的四分之一。它几乎没有大气，昼夜温差从零上 120 度到零下 170 度。潮汐锁定让它永远只把同一面朝向地球。', audio:'assets/audio/moon.wav',
+    title:'月亮', en:'THE MOON',
+    stats:[['直径','3,475 km · 地球的 0.27 倍'],['距地','384,400 km · 光走 1.28 秒'],
+           ['自转','27.32 天（与公转同步）'],['温差','-173 ℃ ~ 127 ℃'],['大气','几乎没有']],
+    note:'同一面永远朝向地球——自转与公转严格同步（潮汐锁定），所以站在地面永远看不到它的背面。那些暗色"海"是古老的玄武岩熔岩平原。' },
+
+  mercury: { map:'assets/planets/mercury.jpg', tint:[1.0,0.98,0.95], atm:[0,0,0], atmK:0, obl:0.03, rot:1407.6, dist:2.75,
+    kick:'MERCURY · 0.39 AU',
+    say:'水星是离太阳最近的行星，也是八大行星里最小的一颗，直径 4880 公里。它几乎没有大气，白天能烤到 430 度，夜里掉到零下 180 度。它的一年只有 88 天，一天却长达 59 个地球日。', audio:'assets/audio/mercury.wav', title:'水星', en:'MERCURY',
+    stats:[['直径','4,879 km · 地球的 0.38 倍'],['距日','5,790 万 km'],['自转','58.6 天'],
+           ['温差','-173 ℃ ~ 427 ℃'],['卫星','0 颗']],
+    note:'它的一天比一年还长：太阳日约 176 个地球日，公转一圈只要 88 天。几乎没有大气保温，昼夜落差超过 600 ℃。' },
+
+  venus: { map:'assets/planets/venus_atmosphere.jpg', tint:[1.02,0.95,0.82], atm:[1.0,0.86,0.52], atmK:0.28, obl:177.4, rot:-5832.5, dist:2.8,
+    kick:'VENUS · 0.72 AU',
+    say:'金星和地球大小相近，直径 12000 公里，却被厚厚的二氧化碳云层包住。地表气压是地球的 90 倍，温度约 460 度，比水星还热。它自转极慢，一个金星日比一个金星年还要长。', audio:'assets/audio/venus.wav', title:'金星', en:'VENUS',
+    stats:[['直径','12,104 km · 地球的 0.95 倍'],['距日','1.082 亿 km'],['自转','243 天（逆行）'],
+           ['表面温度','约 464 ℃'],['气压','92 bar · 96.5% 二氧化碳']],
+    note:'你看到的不是地面，是终年不散的浓硫酸云顶。失控温室效应把地表烤到 464 ℃，比更靠近太阳的水星还热。它自转方向与公转相反。' },
+
+  mars: { map:'assets/planets/mars.jpg', tint:[1.02,0.94,0.88], atm:[0.9,0.52,0.30], atmK:0.10, obl:25.2, rot:24.6, dist:2.75,
+    kick:'MARS · 1.52 AU',
+    say:'火星直径 6779 公里，大约是地球的一半。它有一层稀薄的二氧化碳大气，平均温度零下 60 度。奥林匹斯山高约 22 公里，是太阳系最高的火山；水手谷长 4000 公里，像一道巨大的伤疤。', audio:'assets/audio/mars.wav', title:'火星', en:'MARS',
+    stats:[['直径','6,792 km · 地球的 0.53 倍'],['距日','2.28 亿 km'],['自转','24.6 小时'],
+           ['温度','-125 ℃ ~ 20 ℃'],['卫星','2 颗']],
+    note:'红色来自土壤里的氧化铁。太阳系最高的火山奥林匹斯山在这里，高 21.9 km，是珠峰的 2.4 倍；大气密度只有地球的 0.6%。' },
+
+  jupiter: { map:'assets/planets/jupiter.jpg', tint:[1.04,1.0,0.96], atm:[0.88,0.74,0.52], atmK:0.12, obl:3.1, rot:9.9, dist:3.0,
+    kick:'JUPITER · 5.2 AU',
+    say:'木星是太阳系最大的行星，直径 143000 公里，相当于 11 个地球并排。它主要由氢和氦组成，没有可以站立的地面。大红斑是一场刮了几百年的风暴，比整个地球还要宽。', audio:'assets/audio/jupiter.wav', title:'木星', en:'JUPITER',
+    stats:[['直径','142,984 km · 地球的 11.2 倍'],['距日','7.785 亿 km'],['自转','9.9 小时（最快）'],
+           ['云顶温度','约 -110 ℃'],['卫星','95 颗']],
+    note:'没有固体表面——你看到的是氨冰与硫氢化铵的云顶，条纹是不同纬度的高速气流。大红斑是一场至少刮了 190 年的反气旋，宽度能塞下 2~3 个地球。' },
+
+  saturn: { map:'assets/planets/saturn.jpg', tint:[1.05,1.0,0.92], atm:[0.95,0.84,0.60], atmK:0.10, obl:26.7, rot:10.7, dist:4.9, ring:true,
+    kick:'SATURN · 9.58 AU',
+    say:'土星直径 120000 公里，是第二大行星，平均密度比水还轻。它的环主要由无数冰块和岩石组成，宽 27 万公里，厚度却常常不到 10 米。已确认的卫星超过 270 颗，土卫六有浓密的大气。', audio:'assets/audio/saturn.wav', title:'土星', en:'SATURN',
+    stats:[['直径','120,536 km · 地球的 9.4 倍'],['距日','14.32 亿 km'],['自转','10.7 小时'],
+           ['云顶温度','约 -140 ℃'],['卫星','274 颗（已知最多）']],
+    note:'主环从内侧 7 万 km 铺到 13.6 万 km，由亿万个水冰颗粒组成，主体厚度大多不足 10 米。环缝是土卫的引力清出来的。平均密度只有 0.69 g/cm³，比水轻。' },
+
+  uranus: { map:'assets/planets/uranus.jpg', tint:[0.98,1.02,1.04], atm:[0.55,0.88,0.98], atmK:0.22, obl:97.8, rot:-17.2, dist:2.85,
+    kick:'URANUS · 19.2 AU',
+    say:'天王星直径 51000 公里，是一颗冰巨星，大气里的甲烷让它呈青蓝色。它的自转轴几乎躺倒在轨道面上，倾角约 98 度，所以两极各有长达 42 年的极昼和极夜。', audio:'assets/audio/uranus.wav', title:'天王星', en:'URANUS',
+    stats:[['直径','51,118 km · 地球的 4.0 倍'],['距日','28.67 亿 km'],['自转','17.2 小时（逆行）'],
+           ['温度','约 -195 ℃'],['转轴倾角','97.8°（躺着转）']],
+    note:'96% 是氢与氦，甲烷吸收了红光，剩下青蓝。它的自转轴几乎躺在轨道面上，于是一年里有一半时间是极昼、一半是极夜——这是太阳系唯一的"侧滚"行星。' },
+
+  neptune: { map:'assets/planets/neptune.jpg', tint:[0.94,0.98,1.06], atm:[0.38,0.62,1.0], atmK:0.22, obl:28.3, rot:16.1, dist:2.85,
+    kick:'NEPTUNE · 30.1 AU',
+    say:'海王星直径 49000 公里，是离太阳最远的行星，平均距离约 45 亿公里。阳光到这里已经很弱，温度约零下 200 度。它的风速可达每小时 2100 公里，是太阳系风最猛的地方。', audio:'assets/audio/neptune.wav', title:'海王星', en:'NEPTUNE',
+    stats:[['直径','49,528 km · 地球的 3.9 倍'],['距日','45.15 亿 km'],['自转','16.1 小时'],
+           ['温度','约 -200 ℃'],['风速','可达 2,100 km/h']],
+    note:'太阳系最猛的风在这里。它是唯一一颗先用数学推算位置、再被望远镜找到的行星——1846 年，勒维耶算出它该在哪里，伽勒当晚就看到了。' },
+};
+
+const SRC_TEX = '纹理 Solar System Scope · CC BY 4.0 ｜ 数据 NASA NSSDCA（2025-03）';
+const SRC_NASA = '数据 NASA NSSDCA Planetary Fact Sheet（2025-03）';
+
+/* 一套通用材质：等距圆柱反照图 + 固定方向的主光 + 边缘大气散射 */
+const planetGroup = new THREE.Group();
+planetGroup.visible = false;
+viewScene.add(planetGroup);
+
+const planetMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(1, 96, 64),
+  new THREE.MeshBasicMaterial({ color: 0x101014 })
+);
+planetGroup.add(planetMesh);
+
+const VIEW_LIGHT = new THREE.Vector3(-0.74, 0.34, 0.58).normalize();   // 视图空间主光（左上侧光，留出晨昏线）
+
+const planetMats = {};
+function planetMaterial(key) {
+  if (planetMats[key]) return planetMats[key];
+  const cfg = PLANET_VIEWS[key];
+  const tex = new THREE.TextureLoader().load(cfg.map);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  planetMats[key] = new THREE.ShaderMaterial({
+    uniforms: {
+      uMap: { value: tex },
+      uLight: { value: VIEW_LIGHT },
+      uTint: { value: new THREE.Vector3().fromArray(cfg.tint || [1, 1, 1]) },
+      uAtm: { value: new THREE.Vector3().fromArray(cfg.atm || [0, 0, 0]) },
+      uAtmK: { value: cfg.atmK || 0 },
+    },
+    vertexShader: /* glsl */`
+      varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main(){
+        vUv = uv;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vN = normalize(normalMatrix * normal);
+        vV = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */`
+      precision highp float;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      uniform sampler2D uMap; uniform vec3 uLight; uniform vec3 uTint; uniform vec3 uAtm; uniform float uAtmK;
+      void main(){
+        vec3 base = texture2D(uMap, vUv).rgb * uTint;
+        float ndl = dot(normalize(vN), normalize(uLight));
+        float lit = smoothstep(-0.06, 0.30, ndl);          // 晨昏线要看得见，但别硬切
+        float mu = clamp(dot(normalize(vN), normalize(vV)), 0.0, 1.0);
+        vec3 col = base * (0.010 + 0.99 * lit) * mix(0.58, 1.0, pow(mu, 0.55)) * 0.82;   // 压一档曝光，别让球糊成白
+        col += uAtm * pow(1.0 - mu, 5.5) * lit * uAtmK;    // 只在被照亮的那一侧有大气亮边
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+  });
+  return planetMats[key];
+}
+
+/* 土星环：真实内外径（1.24 – 2.27 个行星半径），按半径采样，并让行星挡住阳光 */
+const ringTex = new THREE.TextureLoader().load('assets/planets/saturn-ring.png');
+ringTex.colorSpace = THREE.SRGBColorSpace;
+ringTex.generateMipmaps = false;
+ringTex.minFilter = THREE.LinearFilter;
+ringTex.magFilter = THREE.LinearFilter;
+ringTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+const RING_IN = 1.24, RING_OUT = 2.27;
+const ringMesh = new THREE.Mesh(
+  new THREE.RingGeometry(RING_IN, RING_OUT, 240, 1),
+  new THREE.ShaderMaterial({
+    uniforms: { uRing: { value: ringTex }, uLight: { value: VIEW_LIGHT }, uIn: { value: RING_IN }, uOut: { value: RING_OUT } },
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    vertexShader: /* glsl */`
+      varying vec2 vLocal; varying vec3 vP; varying vec3 vNw;
+      void main(){
+        vLocal = position.xy;
+        vNw = normalize((modelMatrix * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vP = mv.xyz;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */`
+      precision highp float;
+      varying vec2 vLocal; varying vec3 vP; varying vec3 vNw;
+      uniform sampler2D uRing; uniform vec3 uLight; uniform float uIn; uniform float uOut;
+      void main(){
+        float r = length(vLocal);
+        float t = (r - uIn) / (uOut - uIn);
+        if (t < -0.001 || t > 1.001) discard;
+        vec4 ring = texture2D(uRing, vec2(clamp(t, 0.0, 1.0), 0.5));
+        if (ring.a < 0.02) discard;
+        float sh = 0.52 + 0.48 * abs(dot(vNw, uLight));      // 环面朝向大致决定明暗
+        // 行星阴影：落在球的后侧且离光轴不到一个半径 → 被挡住（边缘给软过渡，不切硬边）
+        float sd = dot(vP, uLight);
+        if (sd < 0.0) {
+          vec3 perp = vP - uLight * sd;
+          sh *= mix(0.34, 1.0, smoothstep(0.90, 1.30, length(perp)));
+        }
+        gl_FragColor = vec4(ring.rgb * sh * 1.10, ring.a);
+      }`,
+  })
+);
+ringMesh.rotation.x = -(Math.PI / 2 - 26.7 * Math.PI / 180);   // 环面与视线夹角 ≈ 真实倾角
+ringMesh.visible = false;
+planetGroup.add(ringMesh);
+
+/* 特写 HUD 按 key 填字 */
+/* 讲解：每颗星一张 16k 单体人声，点一次读一遍，再点停 */
+let sayAudio = null, sayKey = '';
+const sayEl = document.getElementById('shSay');
+function sayLabel(on) {
+  sayEl.classList.toggle('playing', !!on);
+  sayEl.querySelector('span').textContent = on ? '停止' : '讲解';
+}
+function sayStop() {
+  if (sayAudio) { try { sayAudio.pause(); sayAudio.currentTime = 0; } catch (e) {} }
+  sayKey = '';
+  sayLabel(false);
+}
+function sayToggle(ev) {
+  if (ev) { ev.stopPropagation(); if (ev.cancelable) ev.preventDefault(); }
+  const key = VIEWC.key;
+  const cfg = PLANET_VIEWS[key];
+  if (!cfg || !cfg.audio) return;
+  if (sayAudio && sayKey === key && !sayAudio.paused) { sayStop(); return; }
+  sayStop();
+  if (!sayAudio) {
+    sayAudio = new Audio();
+    sayAudio.preload = 'auto';
+    sayAudio.addEventListener('ended', sayStop);
+  }
+  sayKey = key;
+  sayAudio.src = cfg.audio;
+  const pr = sayAudio.play();
+  if (pr && pr.catch) pr.catch(() => { sayStop(); });
+  sayLabel(true);
+}
+// 手机端同样用 pointerup 抢在合成 click 之前，去掉可能的双触发
+let sayLast = 0;
+function sayTap(ev) {
+  const now = performance.now();
+  if (ev.type === 'click' && now - sayLast < 600) { ev.stopPropagation(); return; }
+  sayLast = now;
+  sayToggle(ev);
+}
+sayEl.addEventListener('pointerup', sayTap);
+sayEl.addEventListener('click', sayTap);
+
+function fillViewHud(key) {
+  const c = PLANET_VIEWS[key];
+  const $ = (id) => document.getElementById(id);
+  $('shKick').textContent = c.kick;
+  $('shTitle').textContent = c.title;
+  $('shEn').textContent = c.en;
+  $('shStats').innerHTML = c.stats.map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join('');
+  $('shNote').textContent = c.note;
+  $('shSrc').textContent = c.proc ? SRC_NASA : SRC_TEX;
+}
+
+/* 过渡：先让星光糊成径向流，闪一下白，再露出这颗星；返回时反过来 */
+const VIEWC = { on: false, phase: 'idle', t0: 0, spinT0: 0, key: 'sun', dist: 2.55, yaw: 0, pitch: 0, drag: false, lastX: 0, lastY: 0 };
+const IN_MS = 1500, OUT_MS = 1300;
+const sunFlashEl = document.getElementById('sunFlash');
+const easek = (t) => t * t * (3 - 2 * t);
+
+function viewUpdate(now) {
+  const sec = now * 0.001;
+  const cfg = PLANET_VIEWS[VIEWC.key] || PLANET_VIEWS.sun;
+  sunUni.uTime.value = sec;
+  sunUni.uPulse.value = 1.0 + 0.045 * Math.sin(sec * 2.3) + 0.02 * Math.sin(sec * 7.1);
+  const cp = Math.cos(VIEWC.pitch);
+  viewCam.position.set(VIEWC.dist * Math.sin(VIEWC.yaw) * cp, VIEWC.dist * Math.sin(VIEWC.pitch), VIEWC.dist * Math.cos(VIEWC.yaw) * cp);
+  viewCam.lookAt(0, 0, 0);
+  // 日冕片永远挡在球后面且正对相机
+  sunCorona.position.set(0, 0, 0).addScaledVector(new THREE.Vector3().subVectors(new THREE.Vector3(0, 0, 0), viewCam.position).normalize(), 1.45);
+  sunCorona.quaternion.copy(viewCam.quaternion);
+  // 自由自转：真实周期（金星 5832 小时）照搬会一动不动，按"一圈 80~240 秒"重标定，
+  // 方向仍按真实顺行/逆行取符号；相位从进入那一刻起算，别拿页面启动时间当相位
+  const el = (now - VIEWC.spinT0) * 0.001;
+  if (!cfg.proc && cfg.rot) {
+    const rev = Math.max(80, Math.min(240, Math.abs(cfg.rot) * 9));   // 秒/圈
+    const dir = cfg.rot < 0 ? -1 : 1;
+    planetMesh.rotation.y = (cfg.rot0 || 0) + dir * el * (2 * Math.PI / rev);
+  } else if (cfg.proc) {
+    sunMesh.rotation.y = el * (2 * Math.PI / 200);   // 太阳表面缓慢自转，别让等离子体“钉死”
+  }
+}
+
+function enterView(key) {
+  if (VIEWC.phase === 'in' || VIEWC.on) return;
+  const cfg = PLANET_VIEWS[key];
+  if (!cfg) return;
+  if (tour.on) tourStop(true);
+  hideInfo();
+  sayStop();              // 换一颗星，上一段讲解立刻收声
+  VIEWC.key = key; VIEWC.yaw = 0; VIEWC.pitch = 0;
+  state.vYaw = 0;          // 进特写前把滑行清掉，回来时镜头不能自己漂
+  // 竖屏手机上下窄：相机后撤一档，否则球顶到画框、左下角 HUD 直接压在盘面上
+  const narrow = window.innerWidth < 700 && window.innerHeight > window.innerWidth;
+  VIEWC.dist = (cfg.dist || 2.55) * (narrow ? 1.45 : 1);
+  viewCam.fov = cfg.fov || 50;
+  viewCam.updateProjectionMatrix();
+  // 换外观：太阳走程序化球 + 日冕，其余走反照图球（土星多一张环）
+  sunMesh.visible = !!cfg.proc;
+  sunCorona.visible = !!cfg.proc;
+  planetGroup.visible = !cfg.proc;
+  if (!cfg.proc) {
+    planetMesh.material = planetMaterial(key);
+    planetMesh.rotation.y = cfg.rot0 || 0;   // 有些贴图的 0° 经度不在正面，按需先转
+    VIEWC.spinT0 = performance.now();
+    ringMesh.visible = !!cfg.ring;
+  }
+  fillViewHud(key);
+  // 把径向模糊的中心挪到这颗星在屏上的位置：才像"朝着它飞"，而不是原地打转
+  const idx = BODIES.findIndex((b) => b.key === key);
+  const w = idx >= 0 ? bodyWorld[idx] : null;
+  if (w) {
+    const pr = w.clone().project(camera);
+    if (pr.z < 1) warpPass.uniforms.uCenter.value.set(pr.x * 0.5 + 0.5, pr.y * 0.5 + 0.5);
+  }
+  document.body.classList.add('sunwarp');     // 穿梭一开始主角 HUD 就让位
+  VIEWC.phase = 'in'; VIEWC.t0 = performance.now();
+}
+function exitView() {
+  if (!VIEWC.on || VIEWC.phase === 'out') return;
+  sayStop();              // 离开特写，讲解跟着停
+  VIEWC.phase = 'out'; VIEWC.t0 = performance.now();
+}
+// 返回也吃 pointerup：手机端不必依赖合成 click（exitView 自己有 phase 守卫，重复调用无害）
+document.getElementById('sunBack').addEventListener('pointerup', (e) => {
+  if (e.cancelable) e.preventDefault();
+  exitView();
+});
+document.getElementById('sunBack').addEventListener('click', exitView);
+
+function sunViewTick(now) {
+  if (VIEWC.phase === 'idle') return false;
+  const k = now - VIEWC.t0;
+
+  if (VIEWC.phase === 'in') {
+    const t = Math.min(1, k / IN_MS);
+    if (t < 0.50) { WARP.value = easek(t / 0.50); sunFlashEl.style.opacity = '0'; }
+    else if (t < 0.62) {
+      WARP.value = 1.0;
+      sunFlashEl.style.opacity = String((t - 0.50) / 0.12);
+    } else {
+      if (!VIEWC.on) {                       // 白光最亮的那一帧换场景，看不出切
+        renderPass.scene = viewScene; renderPass.camera = viewCam;
+        document.body.classList.remove('sunwarp');
+        document.body.classList.add('suncam');
+        VIEWC.on = true;
+        WARP.value = 0;
+        if (PLANET_VIEWS[VIEWC.key].proc) { bloom.strength = 0.62; bloom.radius = 0.48; bloom.threshold = 0.66; }
+        else { bloom.strength = 0.30; bloom.radius = 0.40; bloom.threshold = 0.92; }
+      }
+      sunFlashEl.style.opacity = String(Math.max(0, 1 - (t - 0.62) / 0.38));
+    }
+    if (t >= 1) { VIEWC.phase = 'sun'; sunFlashEl.style.opacity = '0'; }
+    viewUpdate(now);
+    composer.render();
+    return true;
+  }
+
+  if (VIEWC.phase === 'sun') { viewUpdate(now); composer.render(); return true; }
+
+  // out
+  const t = Math.min(1, k / OUT_MS);
+  sunFlashEl.style.opacity = String(t < 0.20 ? t / 0.20 : Math.max(0, 1 - (t - 0.20) / 0.80));
+  if (t > 0.20 && VIEWC.on) {
+    renderPass.scene = scene; renderPass.camera = camera;
+    document.body.classList.remove('suncam');
+    document.body.classList.add('sunwarp');   // 回去的路上 HUD 也先别弹出来
+    VIEWC.on = false;
+    bloom.strength = 0.70; bloom.radius = 0.55; bloom.threshold = 0.22;
+    setFov(state.fov);                        // 回来时把视场收束到当前值
+  }
+  if (t > 0.20) WARP.value = 0.85 * (1 - (t - 0.20) / 0.80);
+  viewUpdate(now);
+  composer.render();
+  if (t >= 1) {
+    VIEWC.phase = 'idle'; WARP.value = 0; sunFlashEl.style.opacity = '0';
+    warpPass.uniforms.uCenter.value.set(0.5, 0.52);   // 交还给入场电影的默认中心
+    document.body.classList.remove('sunwarp');
+  }
+  return true;
+}
 
 
 /* =================================================== 行星：历表与坐标链 */
@@ -1138,19 +1982,14 @@ for (let i = 0; i <= ECL_N; i++) {
 }
 
 /* --------------------------------------------------------------- 状态 */
-function nightOrDefault(ms) {
-  const d = new Date(ms);
-  const h = d.getHours();
-  // 白天打开时给一个夜空；夜里/清晨则用现在的时刻
-  if (h >= 6 && h < 19) { const n = new Date(d); n.setHours(21, 30, 0, 0); return n.getTime(); }
-  return ms;
-}
+/* 白天打开也要用真实时刻：本页是"固定夜空观测模式"，
+   天光不会压掉星空，所以不需要把 09:40 偷偷改成 21:30。 */
 
 const state = {
   timeMs: (() => {
     const q = new URLSearchParams(location.search).get('at');   // ?at=2026-11-11T21:30
     if (q) { const t = Date.parse(q); if (!isNaN(t)) return t; }
-    return nightOrDefault(Date.now());
+    return Date.now();
   })(),
   speed: 1,
   lastSpeed: 1,          // 暂停后"开始"要恢复到原来的倍速
@@ -1159,6 +1998,7 @@ const state = {
   pitch: (() => { const v = parseFloat(new URLSearchParams(location.search).get('pitch')); return isFinite(v) ? v : 0.34; })(),
   dragging: false,
   lastX: 0, lastY: 0, lastT: 0,
+  vYaw: 0,               // 触摸松手后的滑行角速度（rad/s）
   velocity: 0,          // 拖拽惯性（小时/秒）
   focus: null,          // 目标天体的世界方向
   fov: (() => { const v = parseFloat(new URLSearchParams(location.search).get('fov')); return isFinite(v) ? Math.max(6, Math.min(78, v)) : 58; })(),
@@ -1351,6 +2191,71 @@ const ASTER = [
 
 const GROUPS = CONSTS.concat(ASTER);
 
+/* 「光走了多久」的讲解词（每段 100 字以内，念完一句就能对上那束光走的时间） */
+const FAMOUS_SAY = {
+  cen:  '先看离我们最近的恒星：南门二，4.4 光年。你此刻看到的光，出发时还是 2022 年。它其实是三颗星，最小的那颗比邻星，只有 4.24 光年。',
+  sir:  '天狼星，8.6 光年，全天最亮。它身边藏着一颗白矮星，一茶匙就有五吨重。那是太阳这类恒星烧完以后的样子。',
+  bet:  '参宿四，约 550 光年。你看到的是明朝发出的光。这颗红超巨星直径是太阳的 700 倍，随时可能炸成超新星。',
+  m42:  '猎户座大星云，1344 光年，光出发时中国还在南宋。这里是恒星的产房，正在现场制造新的太阳系。',
+  m1:   '蟹状星云，6500 光年。公元 1054 年，北宋天文官记下这颗白天可见的客星；那束光走了 6500 年，正好在那一年抵达。',
+  sgra: '银河系中心，人马座 A 星，2.7 万光年。那里藏着一个四百万倍太阳质量的黑洞。你看到的光，出发时人类还在洞穴里画画。',
+  m31:  '仙女座星系，254 万光年，肉眼能看到的最远天体。光出发时，地球上刚出现能人。四十亿年后，它会和银河系撞在一起。',
+  q3c:  '类星体 3C 273，24 亿光年。光出发时，地球只有单细胞生命。它一秒放出的能量，超过整个银河系。',
+};
+
+/* ------------------------------------------------- 尺度阶梯（A 档·八个著名天体）
+   从 4.4 光年到 24 亿光年，每跳一档数量级；坐标取 J2000 赤经/赤纬（度）。
+   light = 光走多久（口语化，便于讲解词直接念）。 */
+const FAMOUS = [
+  { key:'cen', cn:'南门二', en:'Alpha Centauri', ra:219.9021, dec:-60.8340, ly:4.37,
+    kind:'三合星系统 · G2V + K1V + M5.5V', mag:-0.27, color:'#ffe7c9',
+    dist:'4.37 光年', light:'4 年 5 个月', short:'4.4',
+    desc:'离太阳最近的恒星系统。三颗星互相绕转：A、B 两颗类太阳恒星相距 4.1 光年处互绕，比邻星（C）在更外侧。比邻星 b 是已知最近的系外行星。',
+    note:'比你此刻看到的任何星都近：从地球发出的无线电，4 年多才到那里。它也是科幻里“第一站”的常客。' },
+
+  { key:'sir', cn:'天狼星', en:'Sirius', ra:101.2872, dec:-16.7161, ly:8.6,
+    kind:'A1V 主序星 + 白矮星伴星', mag:-1.46, color:'#dfe9ff',
+    dist:'8.6 光年', light:'8 年 7 个月', short:'8.6',
+    desc:'全天最亮的恒星，大犬座 α。它与一颗白矮星（天狼星 B）互绕，周期约 50 年。白矮星是太阳这类恒星燃尽后的残骸：质量接近太阳，体积却只有地球大小。',
+    note:'一茶匙白矮星物质约重 5 吨。天狼星 B 是人类发现的第二颗白矮星，也是“恒星终点”的第一个实样。' },
+
+  { key:'bet', cn:'参宿四', en:'Betelgeuse', ra:88.7929, dec:7.4070, ly:548,
+    kind:'红超巨星 · M1-2 Ia-ab', mag:0.50, color:'#ffb48a',
+    dist:'约 550 光年', light:'550 年', short:'550',
+    desc:'猎户座肩上的红超巨星，直径约太阳的 700 倍：放到太阳位置，会一直胀到火星轨道附近。质量约 15~20 倍太阳，寿命只有千万年量级，终将以超新星收场。',
+    note:'它随时可能爆发（天文尺度上的“随时”）。真爆的那天，白天也能看见，亮度接近满月，但 550 光年外的辐射对人无害。' },
+
+  { key:'m42', cn:'猎户座大星云', en:'Orion Nebula · M42', ra:83.8221, dec:-5.3911, ly:1344,
+    kind:'发射星云 · 恒星诞生区', mag:4.0, color:'#ffd9e8',
+    dist:'1344 光年', light:'1344 年', short:'1344',
+    desc:'银河系里离我们最近的大质量恒星形成区，肉眼在猎户的“佩剑”处就能看到一小团雾。里面藏着上千颗正在形成的恒星，中心的四边形星团正把周围气体电离发光。',
+    note:'你看到的每一颗新星，都在同一套流程里诞生：分子云坍缩、原恒星点亮、盘里滚出行星。这里就是“产房”的现场。' },
+
+  { key:'m1', cn:'蟹状星云', en:'Crab Nebula · M1', ra:83.6331, dec:22.0145, ly:6500,
+    kind:'超新星遗迹 · 中心脉冲星', mag:8.4, color:'#ffcfa8',
+    dist:'6500 光年', light:'6500 年', short:'6500',
+    desc:'公元 1054 年那次超新星的残骸。北宋天文官记下这颗“天关客星”：白天可见，持续 23 天。今天它是一团每秒膨胀约 1 光分的气体云，中心留着一颗每秒自转 30 圈的中子星。',
+    note:'这是中国古代天象记录与现代天体物理对上的最漂亮一例：一条宋朝的观测笔记，指向一颗中子星。' },
+
+  { key:'sgra', cn:'人马座 A*', en:'Sagittarius A*', ra:266.4168, dec:-29.0078, ly:26000,
+    kind:'超大质量黑洞 · 400 万倍太阳', mag:6.0, color:'#ff9aa0',
+    dist:'2.7 万光年', light:'2.7 万年', short:'2.7万',
+    desc:'银河系中心的超大质量黑洞，质量约 400 万倍太阳。恒星 S2 以 16 年周期绕它一圈，最近处速度接近光速的 1/4 —— 这是“看不见的质量”最硬的证据之一。',
+    note:'2022 年事件视界望远镜公布了它的照片：一圈亮环包着一块黑，那块黑就是连光都跑不出来的地方。' },
+
+  { key:'m31', cn:'仙女座星系', en:'Andromeda Galaxy · M31', ra:10.6847, dec:41.2690, ly:2.54e6,
+    kind:'旋涡星系 · 本星系群最大成员', mag:3.4, color:'#cfe0ff',
+    dist:'254 万光年', light:'254 万年', short:'254万',
+    desc:'离银河系最近的大星系，直径约 22 万光年，恒星数量以万亿计。肉眼在仙女座能看到一小片雾状光斑——那是 254 万年前出发的光。',
+    note:'它正以约 110 km/s 向我们靠近，约 40 亿年后与银河系合并，最终变成一个椭圆星系。夜空的样子会彻底改变。' },
+
+  { key:'q3c', cn:'类星体 3C 273', en:'Quasar', ra:187.2779, dec:2.0525, ly:2.4e9,
+    kind:'类星体 · 宇宙中最亮的一类天体', mag:12.9, color:'#dbe6ff',
+    dist:'24 亿光年', light:'24 亿年', short:'24亿',
+    desc:'第一个被认出的类星体（1963）。它由一个约 8 亿倍太阳质量的超大质量黑洞驱动，吸积盘把物质转化成光，亮度相当于整个银河系的百倍以上，却只集中在一个太阳系大小的区域。',
+    note:'你看到的是 24 亿年前的光：那时地球只有单细胞生物，氧气刚刚开始在大气里积累。望远镜就是时间机器。' },
+];
+
 /* ---- 展平成星点表 / 线段表 ---- */
 const cStars = [], cSegs = [], cRange = [];
 GROUPS.forEach(c => {
@@ -1429,6 +2334,70 @@ cStarPts.renderOrder = -4;
 cStarPts.frustumCulled = false;
 scene.add(cStarPts);
 
+/* ---- 尺度阶梯那 8 个天体：单独一层点精灵，颜色按天体类型给，亮星给得更大 ---- */
+const fPosArr = new Float32Array(FAMOUS.length * 3);
+const fMagArr = new Float32Array(FAMOUS.length);
+const fColArr = new Float32Array(FAMOUS.length * 3);
+const fGeo = new THREE.BufferGeometry();
+fGeo.setAttribute('position', new THREE.BufferAttribute(fPosArr, 3));
+fGeo.setAttribute('aMag', new THREE.BufferAttribute(fMagArr, 1));
+fGeo.setAttribute('aCol', new THREE.BufferAttribute(fColArr, 3));
+const fMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  uniforms: { uPixelRatio: U.uPixelRatio, uFov: U.uFov, uOpacity: { value: 1.0 },
+              uTime: { value: 0 } },
+  vertexShader: /* glsl */`
+    attribute float aMag; attribute vec3 aCol;
+    uniform float uPixelRatio, uFov, uOpacity;
+    varying float vA; varying vec3 vC;
+    void main(){
+      vec3 w = position;
+      float vis = smoothstep(0.0, 0.035, w.y / ${SKY_R.toFixed(1)});
+      float f = pow(10.0, -0.4 * (aMag - 1.0));
+      vA = vis * uOpacity;
+      vC = aCol;
+      // 这是「标记」不是星光：屏幕尺寸恒定、不随视场缩小，缩到全天空也认得出
+      gl_PointSize = (10.0 + 3.5 * clamp(f, 0.0, 1.0)) * uPixelRatio * 1.9;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(w, 1.0);
+    }`,
+  fragmentShader: /* glsl */`
+    precision highp float;
+    uniform float uTime;
+    varying float vA; varying vec3 vC;
+    void main(){
+      vec2 p = gl_PointCoord * 2.0 - 1.0;
+      float d = sqrt(dot(p, p));
+      if (d > 1.0) discard;
+      float core = exp(-d * d * 22.0);                                     // 中心一颗小实心点
+      float ring = exp(-pow((d - 0.70) * 11.0, 2.0));                      // 一圈细环
+      float tick = step(0.70, d) * step(d, 0.97)
+                 * (step(abs(p.x), 0.05) + step(abs(p.y), 0.05)) * 0.55;   // 环外四个方向的短刻度
+      float pulse = 0.72 + 0.28 * sin(uTime * 1.5);                        // 缓慢呼吸，静止画面里也看得见
+      gl_FragColor = vec4(vC * (core * 1.0 + ring * 0.30 * pulse + tick * 0.38 * pulse) * vA, 1.0);
+      #include <colorspace_fragment>
+    }`,
+});
+const fPts = new THREE.Points(fGeo, fMat);
+fPts.renderOrder = -3; fPts.frustumCulled = false;
+scene.add(fPts);
+const fDir = FAMOUS.map(f => {
+  const ra = f.ra * DEG, dec = f.dec * DEG;
+  return new THREE.Vector3(Math.cos(dec) * Math.cos(ra), Math.cos(dec) * Math.sin(ra), Math.sin(dec));
+});
+const fWorld = FAMOUS.map(() => new THREE.Vector3());
+FAMOUS.forEach((f, i) => {
+  fMagArr[i] = f.mag;
+  const c = new THREE.Color(f.color);
+  fColArr[i * 3] = c.r; fColArr[i * 3 + 1] = c.g; fColArr[i * 3 + 2] = c.b;
+});
+function updateFamous(sky) {
+  for (let i = 0; i < FAMOUS.length; i++) {
+    fWorld[i].copy(fDir[i]).applyMatrix3(sky).multiplyScalar(SKY_R);
+    fPosArr[i * 3] = fWorld[i].x; fPosArr[i * 3 + 1] = fWorld[i].y; fPosArr[i * 3 + 2] = fWorld[i].z;
+  }
+  fGeo.attributes.position.needsUpdate = true;
+}
+
 /* ---- 连线：底图（全部星座，很淡）+ 选中层（只有选中那个，提亮） ---- */
 const cLineGeo = new THREE.BufferGeometry();
 cLineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(cSegs.length * 6), 3));
@@ -1456,6 +2425,7 @@ cHiGeo.setDrawRange(0, 0);
 /* ---- 每帧更新：世界坐标 + 连线 + 地平遮挡 ---- */
 const cHidden = new THREE.Vector3();
 function updateConst(sky) {
+  updateFamous(sky);
   cHidden.copy(camera.position).addScaledVector(camera.getWorldDirection(tmpV), -8);
   for (let k = 0; k < cStars.length; k++) {
     cWorld[k].copy(cStars[k].dir).applyMatrix3(sky).multiplyScalar(SKY_R);
@@ -1506,20 +2476,25 @@ BODIES.forEach((b, i) => {
 
 /* ---- 星座清单（第二个 Tab） ---- */
 const rowsConst = document.getElementById('rowsConst');
+const rowsStars = document.getElementById('rowsStars');
+let starSectDone = false;
 const constRowEls = GROUPS.map((c, i) => {
-  if (c.kind === '星群') {           // 星群区隔开，免得被当成第 13 个黄道星座
+  const isStar = c.kind === '星群';
+  // 星群单独一节，放进「群星」tab，免得被当成第 13 个黄道星座
+  if (isStar && !starSectDone) {
+    starSectDone = true;
     const sect = document.createElement('div');
     sect.className = 'sect';
     sect.textContent = '星群 · 指北';
-    rowsConst.appendChild(sect);
+    rowsStars.appendChild(sect);
   }
   const el = document.createElement('div');
   el.className = 'row';
-  el.innerHTML = `<span class="dot" style="background:${c.kind === '星群' ? '#e8d9a6' : '#a9c6ff'};color:${c.kind === '星群' ? '#e8d9a6' : '#a9c6ff'}"></span>
+  el.innerHTML = `<span class="dot" style="background:${isStar ? '#e8d9a6' : '#a9c6ff'};color:${isStar ? '#e8d9a6' : '#a9c6ff'}"></span>
     <span class="nm">${c.cn}<small>${c.en.toUpperCase()}</small></span>
     <span class="alt">—</span><span class="mg">—</span>`;
   el.addEventListener('click', () => selectConst(i, true));
-  rowsConst.appendChild(el);
+  (isStar ? rowsStars : rowsConst).appendChild(el);
   return el;
 });
 // 「北极星」单独一行，直接定位到那颗星（它属于小熊座，不在北斗这组里）
@@ -1530,28 +2505,91 @@ const constRowEls = GROUPS.map((c, i) => {
     <span class="nm">北极星<small>POLARIS</small></span>
     <span class="alt">—</span><span class="mg">—</span>`;
   el.addEventListener('click', () => selectStar(POLARIS_STAR, true));
-  rowsConst.appendChild(el);
+  if (!starSectDone) {                    // 若 GROUPS 里没有星群，也补一节标题
+    starSectDone = true;
+    const sect = document.createElement('div');
+    sect.className = 'sect';
+    sect.textContent = '星群 · 指北';
+    rowsStars.appendChild(sect);
+  }
+  rowsStars.appendChild(el);
   constRowEls.push(el);       // 高度用北极星自己的方向算，别用北斗中心
 }
 
+/* 「尺度阶梯」清单：8 个著名天体，点了弹卡片并把镜头轻轻转过去 */
+{
+  const sect = document.createElement('div');
+  sect.className = 'sect';
+  sect.textContent = '尺度阶梯 · 光走了多久';
+  rowsStars.appendChild(sect);
+  FAMOUS.forEach((f, i) => {
+    const el = document.createElement('div');
+    el.className = 'row';
+    // 距离并进名字一行，不去挤右边那两列（右下罗盘会压住最右列）
+    el.innerHTML = `<span class="dot" style="background:${f.color};color:${f.color}"></span>
+      <span class="nm">${f.cn}<small>${f.en.toUpperCase()} · ${f.short} 光年</small></span>`;
+    el.classList.add('fam');
+    el.addEventListener('click', () => {
+      ding(1120);
+      showFamousCard(i);
+      const r = focusFamous(i, { fly: true });
+      if (r.raised && window.innerWidth > 860) {   // 手机屏上卡片已占满上方，这条提示会叠在卡片上
+        const d = new Date(state.timeMs);
+        toast(`已把观测时刻拨到 ${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}，让它在天上`);
+      } else if (!r.ok) {
+        toast(`${FAMOUS[i].cn} 在这个纬度永不升起，只能看卡片`);
+      }
+    });
+    rowsStars.appendChild(el);
+  });
+}
+
 const panelHd = document.getElementById('panelHd');
+const tabWrap = document.getElementById('tabWrap');
+const PANEL_TAB_HD = {
+  body:  '<span>天体</span><span>高度 · 星等</span>',
+  const: '<span>黄道十二星座</span><span>高度 · 最亮星</span>',
+  stars: '<span>星群 · 尺度阶梯</span><span>高度 · 星等</span>',
+};
+function applyTab(name) {
+  const tabs = [...document.querySelectorAll('#tabWrap .tab')];
+  const t = tabs.find(x => x.dataset.t === name);
+  if (!t) return;
+  tabs.forEach(x => x.classList.toggle('on', x === t));
+  document.getElementById('rows').style.display = name === 'body' ? '' : 'none';
+  rowsConst.classList.toggle('show', name === 'const');
+  rowsStars.classList.toggle('show', name === 'stars');
+  panelHd.innerHTML = PANEL_TAB_HD[name] || PANEL_TAB_HD.body;
+  cLineMat.opacity = name === 'body' ? 0.16 : 0.30;   // 看星座/群星时连线提亮，看行星时退到背景
+  tabWrap.scrollLeft = Math.max(0, t.offsetLeft - tabWrap.offsetLeft - 2);   // 把当前组滑进可视区
+}
+function stepTab(d) {
+  const tabs = [...document.querySelectorAll('#tabWrap .tab')];
+  const cur = tabs.findIndex(x => x.classList.contains('on'));
+  const next = Math.min(tabs.length - 1, Math.max(0, cur + d));
+  applyTab(tabs[next].dataset.t);
+}
+document.getElementById('tabL').addEventListener('click', () => stepTab(-1));
+document.getElementById('tabR').addEventListener('click', () => stepTab(1));
 document.getElementById('tabs').addEventListener('click', (e) => {
   const t = e.target.closest('.tab');
-  if (!t) return;
-  const isConst = t.dataset.t === 'const';
-  [...document.querySelectorAll('#tabs .tab')].forEach(x => x.classList.toggle('on', x === t));
-  document.getElementById('rows').style.display = isConst ? 'none' : '';
-  rowsConst.classList.toggle('show', isConst);
-  panelHd.innerHTML = isConst
-    ? '<span>星座 · 星群</span><span>高度 · 最亮星</span>'
-    : '<span>天体</span><span>高度 · 星等</span>';
-  cLineMat.opacity = isConst ? 0.30 : 0.16;   // 看星座列表时连线提亮，看行星时退到背景
+  if (t) applyTab(t.dataset.t);
 });
+tabWrap.scrollLeft = 0;
 
 const labelEls = BODIES.map(b => {
   const el = document.createElement('div');
   el.className = 'lab';
   el.innerHTML = `<i style="background:${b.color}"></i>${b.cn}`;
+  document.getElementById('labels').appendChild(el);
+  return el;
+});
+
+/* 尺度阶梯那 8 个天体的名标（跟着点位走，标一下距离） */
+const flabelEls = FAMOUS.map(f => {
+  const el = document.createElement('div');
+  el.className = 'lab flab';
+  el.innerHTML = `<i style="background:${f.color}"></i>${f.cn}<b>${f.short} 光年</b>`;
   document.getElementById('labels').appendChild(el);
   return el;
 });
@@ -1576,32 +2614,67 @@ refreshEphem(true);
 
 /* ----------------------------------------------------------- 拖拽 / 滚轮 */
 const appEl = renderer.domElement;
+// 触摸设备（手机/平板）：用来决定要不要给"松手滑行"，鼠标端保持 1:1 直接停
+const TOUCHY = !!(window.matchMedia && matchMedia('(pointer:coarse)').matches);
 let booted = false;
 
 let downX = 0, downY = 0, downT = 0;
 
 function onDown(e) {
   if (!booted) return;
+  if (VIEWC.on) { VIEWC.drag = true; VIEWC.lastX = e.clientX; VIEWC.lastY = e.clientY; return; }
+  // 入场镜头期间：任何按下都是"跳过"，不接管视角
+  if (CINE.active) { cineSkip(); return; }
   // 控件上的按下不算拖拽（滑杆、按钮、清单行都要能正常操作）
-  if (e.target && e.target.closest && e.target.closest('input, .pill, .speed, .row, #panel, #boot')) return;
+  // 控件上的按下不算拖拽（滑杆、按钮、清单行、卡片都要能正常操作）
+  // #card 必须在名单里：否则按「查看细节」会被当成拖拽，pointerup 先把手卡收掉，
+  // 手机端（touchend 后重新命中测试）那个 click 就落不到按钮上，表现成"点了没反应"
+  if (e.target && e.target.closest && e.target.closest('input, .pill, .speed, .row, #panel, #boot, #card, #sunHud, #tourbar')) return;
   state.dragging = true;
+  state.vYaw = 0;          // 新的按下打断上一次的滑行
   state.lastX = e.clientX; state.lastY = e.clientY; state.lastT = performance.now();
   state.focus = null;      // 手动拖拽立刻接管视角，取消正在进行的自动对准
   downX = e.clientX; downY = e.clientY; downT = performance.now();
 }
+/* 触摸移动事件按屏幕刷新率合帧到达，一帧里可能压了好几个采样点；
+   getCoalescedEvents() 取回它们逐个消费，转动才跟手而不"一格一格跳" */
+function movePoints(e) {
+  const c = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
+  return (c && c.length) ? c : [e];
+}
 function onMove(e) {
+  if (VIEWC.on) {
+    if (!VIEWC.drag) return;
+    for (const pt of movePoints(e)) {
+      const dx = pt.clientX - VIEWC.lastX, dy = pt.clientY - VIEWC.lastY;
+      VIEWC.lastX = pt.clientX; VIEWC.lastY = pt.clientY;
+      VIEWC.yaw = Math.max(-0.55, Math.min(0.55, VIEWC.yaw - dx * 0.0035));
+      VIEWC.pitch = Math.max(-0.42, Math.min(0.42, VIEWC.pitch - dy * 0.0030));
+    }
+    return;
+  }
   if (!state.dragging) return;
-  const dx = e.clientX - state.lastX;
-  const dy = e.clientY - state.lastY;
-  state.lastX = e.clientX; state.lastY = e.clientY;
-  state.lastT = performance.now();
-  // 拖拽 = 转视角：一屏宽 ≈ 一个视场角，直接映射（无惯性积分，事件批量到达也不跳）
+  // 拖拽 = 转视角：一屏宽 ≈ 一个视场角，直接 1:1 映射
   const yawK = (state.fov * DEG) / Math.max(320, window.innerWidth);
   const pitchK = (state.fov * DEG) / Math.max(320, window.innerHeight);
-  state.yaw += dx * yawK;
-  state.pitch = Math.max(-0.30, Math.min(0.88, state.pitch + dy * pitchK));
+  let dxSum = 0;
+  for (const pt of movePoints(e)) {
+    const dx = pt.clientX - state.lastX, dy = pt.clientY - state.lastY;
+    state.lastX = pt.clientX; state.lastY = pt.clientY;
+    state.yaw += dx * yawK;
+    state.pitch = Math.max(-0.30, Math.min(0.88, state.pitch + dy * pitchK));
+    dxSum += dx;
+  }
+  // 松手滑行用的角速度（只有触摸设备算，PC 鼠标跟原来一样松手即停）
+  if (TOUCHY) {
+    const now = performance.now();
+    const dtm = Math.max(16, now - (state.lastT || now));
+    state.vYaw = (dxSum * yawK) / (dtm / 1000) * 0.55;   // 0.55 是"跟手感"折扣，避免一甩飞出去
+  }
+  state.lastT = performance.now();
 }
 function onUp(e) {
+  if (VIEWC.on) { VIEWC.drag = false; return; }
   const wasDragging = state.dragging;
   state.dragging = false;
   if (!wasDragging || !booted) return;
@@ -1621,6 +2694,22 @@ function onUp(e) {
     if (d < bestD) { bestD = d; best = i; }
   });
   if (best >= 0) { selectBody(best, false); return; }
+  if (e.target && e.target.closest && e.target.closest('#card, #sunHud, #tourbar, #tourEnd')) return;
+  // 尺度阶梯上的 8 个著名天体：给更大的命中半径（深空天体本身只是一个点）
+  if (true) {
+    let bf = -1, bfd = 26;
+    for (let i = 0; i < FAMOUS.length; i++) {
+      const w = fWorld[i];
+      if (!w || w.y / SKY_R < 0.0) continue;
+      const p = w.clone().project(camera);
+      if (p.z >= 1) continue;
+      const fx = (p.x * 0.5 + 0.5) * window.innerWidth;
+      const fy = (-p.y * 0.5 + 0.5) * window.innerHeight;
+      const fd = Math.hypot(fx - e.clientX, fy - e.clientY);
+      if (fd < bfd) { bfd = fd; bf = i; }
+    }
+    if (bf >= 0) { ding(1120); showFamousCard(bf, e.clientX, e.clientY); return; }
+  }
   // 行星没命中，再找星座亮星（半径 16px，取最近）
   if (state.showConst) {
     let bc = -1, bd = 16;     // bc 现在存的是星点索引
@@ -1648,7 +2737,14 @@ function setFov(v) {
   state.zoomAt = performance.now();
 }
 window.addEventListener('wheel', (e) => {
-  if (!booted) return;
+  if (VIEWC.on) {
+    e.preventDefault();
+    const dy = Math.max(-240, Math.min(240, e.deltaY));
+    viewCam.fov = Math.max(24, Math.min(78, viewCam.fov * Math.exp(dy * 0.0018)));
+    viewCam.updateProjectionMatrix();
+    return;
+  }
+  if (!booted || CINE.active) return;
   // Ctrl / ⌘ + 滚轮（触控板捏合）= 视场缩放；单独滚轮仍然是推时间
   if (e.ctrlKey || e.metaKey) {
     e.preventDefault();
@@ -1715,11 +2811,28 @@ function ding(freq) {
 const cardEl = document.getElementById('card');
 let selectedIdx = -1;
 let selectedConst = -1;
+let selectedFamous = -1;
 const clabEl = document.getElementById('clab');
 
 function placeCard(sx, sy) {
   const W = window.innerWidth, H = window.innerHeight;
-  const cw = cardEl.offsetWidth || 232, chh = cardEl.offsetHeight || 168, gapX = 22;
+  const cw = cardEl.offsetWidth || 232, chh = cardEl.offsetHeight || 168;
+  // 「尺度阶梯」那 8 个的标签挂在点位正上方、横向还铺开一段，卡片多留点间隙
+  const gapX = (selectedFamous >= 0 && W > 860) ? 74 : 22;
+  // 窄屏（手机竖屏）：卡片满宽贴顶，把下面留给准星和导览条
+  if (W <= 860 && (tour.on || selectedFamous >= 0)) {
+    cardEl.style.left = '12px';
+    cardEl.style.right = '12px';
+    cardEl.style.width = 'auto';
+    cardEl.style.top = '118px';     // 让开顶部那排按钮
+    return;
+  }
+  // 演示动线里卡片固定停在右上，别跟着（可能在地平线下的）目标乱跑、也别压住导览条
+  if (tour.on) {
+    cardEl.style.left = `${Math.max(12, W - cw - 26)}px`;
+    cardEl.style.top = '118px';
+    return;
+  }
   let cx = sx + gapX;
   if (cx + cw > W - 12) cx = sx - gapX - cw;
   // 窄屏时清单在左下角：卡片一律贴右侧，别和清单叠在一起
@@ -1762,7 +2875,89 @@ function showCard(i) {
   document.getElementById('cardDist').textContent =
     km < 2e6 ? `距地 ${(km / 10000).toFixed(1)} 万 km` : `距地 ${(km / 1e8).toFixed(2)} 亿 km`;
   document.getElementById('cardDesc').textContent = b.desc;
+  // 只有九颗太阳系天体有特写场景：按钮露出来，并把 key 换掉
+  const goEl = document.getElementById('cardGo');
+  goEl.dataset.key = b.key;
+  goEl.classList.toggle('off', !(b.key && PLANET_VIEWS[b.key]));
   cardEl.classList.add('on');
+}
+
+/* 尺度阶梯那 8 个天体：卡片里给「类型 / 距离 / 光走多久」三行硬信息 */
+/* 这一刻这颗星的地平高度（sin 值），只跟恒星时有关 */
+function altSinAtMs(i, ms) {
+  return fDir[i].clone().applyMatrix3(skyMatrix(lstRad(ms))).y;
+}
+/* 这一刻太阳的地平高度（sin 值），只用来判断是不是夜里 */
+function sunAltSinAtMs(ms) {
+  const d = ms / 86400000 + 2440587.5 - 2451545.0;
+  const L = (280.460 + 0.9856474 * d) * DEG;                 // 太阳平黄经
+  const ra = Math.atan2(Math.cos(OBLIQ) * Math.sin(L), Math.cos(L));
+  const dec = Math.asin(Math.sin(OBLIQ) * Math.sin(L));
+  const h = lstRad(ms) - ra;
+  return Math.sin(LAT) * Math.sin(dec) + Math.cos(LAT) * Math.cos(dec) * Math.cos(h);
+}
+/* 找出最近一个「它够高、而且天是黑的」时刻
+   顺序：此刻 → 往后 12 小时 → 往前 12 小时（都还在这一夜附近）→ 按季节扫一年
+   人马座 A* 这类低赤纬天体，南京最高才 29°，要等对季节才够高 */
+function findUpTime(i, targetDeg = 22) {
+  const want = Math.sin(targetDeg * DEG);
+  const okAt = (t) => altSinAtMs(i, t) >= want && sunAltSinAtMs(t) < -0.20;   // 太阳低于 -11.5°，算天黑
+  const t0 = state.timeMs;
+  if (okAt(t0)) return t0;
+  const MIN = 60 * 1000, HOUR = 60 * MIN;
+  for (let dir of [1, -1]) {                   // 同一夜：先往后找，再往前找
+    for (let k = 1; k <= 240; k++) {
+      const t = t0 + dir * k * 3 * MIN;
+      if (okAt(t)) return t;
+    }
+  }
+  for (let k = 1; k <= 2200; k++) {            // 换季：4 小时步长扫一年
+    const t = t0 + k * 4 * HOUR;
+    if (okAt(t)) return t;
+  }
+  return null;
+}
+/* 对准这颗星；目标在地平线下时可选把钟拨到它升起来的时候（演示动线要「转到它身上」） */
+function focusFamous(i, opts) {
+  const fly = !!(opts && opts.fly);
+  let w = fWorld[i];
+  let raised = false;
+  if ((!w || w.y / SKY_R < 0.02) && fly) {
+    const t = findUpTime(i);
+    if (t != null) {
+      state.timeMs = t; raised = true;
+      w = fDir[i].clone().applyMatrix3(skyMatrix(lstRad(state.timeMs))).multiplyScalar(SKY_R);
+    }
+  }
+  if (!w || w.y / SKY_R < 0.02) return { ok: false, raised: false };   // 这个纬度永远看不到：只弹卡片
+  const d = w.clone().normalize();
+  const alt = Math.asin(Math.max(-1, Math.min(1, d.y)));
+  const halfV = state.fov * DEG / 2;
+  // 演示要“转到它身上”：横屏压在画面中上部；竖屏把目标压到下半，别忘了上面还有卡片
+  const k = window.innerWidth <= 860 ? -0.30 : 0.18;
+  state.focus = { yaw: Math.atan2(-d.x, -d.z), pitch: Math.max(0.02, alt - k * halfV) };
+  return { ok: true, raised };
+}
+
+function showFamousCard(i, sx, sy) {
+  const f = FAMOUS[i];
+  if (!f) return;
+  selectedFamous = i; selectedIdx = -1; selectedConst = -1; selectedStar = -1;
+  setConstBoost(-1); clabEl.style.opacity = '0';
+  document.getElementById('cardNote').classList.remove('hide');
+  document.getElementById('cardDot').style.background = f.color;
+  document.getElementById('cardDot').style.color = f.color;
+  document.getElementById('cardName').textContent = f.cn;
+  document.getElementById('cardEn').textContent = f.en.toUpperCase();
+  document.getElementById('cardDia').textContent = f.kind;
+  document.getElementById('cardDist').textContent = `距地 ${f.dist} · 光走了 ${f.light}`;
+  document.getElementById('cardDesc').textContent = f.desc;
+  document.getElementById('cardNote').textContent = f.note;
+  const goEl = document.getElementById('cardGo');
+  goEl.classList.add('off');        // 深空天体暂无独立特写场景
+  goEl.dataset.key = '';
+  cardEl.classList.add('on');
+  if (sx != null) placeCard(sx, sy);
 }
 
 function hideCard() {
@@ -1771,6 +2966,7 @@ function hideCard() {
   selectedIdx = -1;
   selectedConst = -1;
   selectedStar = -1;
+  selectedFamous = -1;
   setConstBoost(-1);
   clabEl.style.opacity = '0';
 }
@@ -1780,7 +2976,27 @@ function selectBody(i, doFocus) {
   ding(1046 - Math.min(420, BODIES[i].size * 16));
   showCard(i);
   if (doFocus) focusBody(i);     // 只有从清单里点才算"对准"，直接在星空里点是原地弹出卡片
+  // 点天体只出卡片；要看细节得再点卡片上的「查看细节」进特写（见 cardGo 的绑定）
 }
+
+// 卡片上的「查看细节」：先关卡片，再走那段星光穿梭进入这颗星的独立场景。
+// 手机端 click 可能被丢（触点起手时元素已被 pointer-events:none），所以 pointerup 就自己处理，
+// 并用 preventDefault 掐掉随后那次合成 click，靠时间戳去重防双触发。
+const cardGoEl = document.getElementById('cardGo');
+let cardGoLast = 0;
+function cardGoTap(ev) {
+  ev.stopPropagation();
+  if (ev.cancelable) ev.preventDefault();
+  const key = cardGoEl.dataset.key;
+  if (!key || !PLANET_VIEWS[key]) return;
+  const now = performance.now();
+  if (now - cardGoLast < 600) return;
+  cardGoLast = now;
+  hideCard();
+  enterView(key);
+}
+cardGoEl.addEventListener('pointerup', cardGoTap);
+cardGoEl.addEventListener('click', cardGoTap);
 
 function constellationOf(starIdx) {
   for (let i = 0; i < cRange.length; i++) {
@@ -1811,6 +3027,9 @@ function showConstCard(i) {
   const note = document.getElementById('cardNote');
   note.textContent = c.note || CONST_NOTE;
   note.classList.remove('hide');
+  const goEl = document.getElementById('cardGo');
+  goEl.classList.add('off');          // 星座卡也没有特写场景
+  goEl.dataset.key = '';
   cardEl.classList.add('on');
   clabEl.innerHTML = `${c.cn}<small>${c.en.toUpperCase()}</small>`;
 }
@@ -1849,6 +3068,9 @@ function showStarCard(k) {
   const note = document.getElementById('cardNote');
   note.textContent = '天文提示：星等是"从地球看上去有多亮"，数值越小越亮，与恒星的真实光度不是一回事；距离则意味着我们看到的是它若干年前发出的光。';
   note.classList.remove('hide');
+  const goEl = document.getElementById('cardGo');
+  goEl.classList.add('off');          // 恒星/星座没有特写场景
+  goEl.dataset.key = '';
   cardEl.classList.add('on');
   clabEl.innerHTML = `${info.cn || g.cn}<small>${(info.bayer || g.en).toUpperCase()}</small>`;
 }
@@ -1885,7 +3107,10 @@ function focusStar(k) {
 window.addEventListener('keydown', (e) => {
   if (!booted) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); enterNight(); } return; }
   const k = e.key.toLowerCase();
-  if (k === 'escape') { hideCard(); hideInfo(); if (tour.on) tourStop(); }
+  if (k === 'escape') {
+    if (VIEWC.on || VIEWC.phase === 'in') { exitView(); return; }
+    hideCard(); hideInfo(); if (tour.on) tourStop();
+  }
   if (k === 'l') { state.showLabels = !state.showLabels; document.getElementById('btnLabel').classList.toggle('on', state.showLabels); }
   if (k === 'e') { state.showEcl = !state.showEcl; document.getElementById('btnEcl').classList.toggle('on', state.showEcl); }
   if (k === 'c') { state.showConst = !state.showConst; applyConstVisual(); }
@@ -1921,10 +3146,7 @@ const tour = { on: false, idx: -1, t0: 0, paused: false, held: 0, prevFov: 0 };
 let tourPlanet = -1;
 
 function setEcl(v) { state.showEcl = v; document.getElementById('btnEcl').classList.toggle('on', v); }
-function setTab(name) {
-  const t = document.querySelector(`#tabs .tab[data-t="${name}"]`);
-  if (t && !t.classList.contains('on')) t.click();
-}
+function setTab(name) { applyTab(name); }
 function highestConst() {   // 此刻地平线上最高的星座
   const sky = skyMatrix(lstRad(state.timeMs));
   let best = 0, bestY = -9;
@@ -1943,13 +3165,15 @@ function bestPlanet(skipMoon) {   // 此刻最高、够亮的行星（排除太�
   return best;
 }
 
-const TOUR = [
+const SYSTOUR = [
   { title: '① 黄道',
-    text: '这条淡金色斜线，是地球公转轨道面在天球上的投影。太阳一年沿着它走一圈，行星、月亮也都挤在它附近 —— 因为大家的轨道几乎在同一个平面上。',
+    audio: 'assets/tour/nar-1.mp4',
+    text: '这条淡金色的斜线，是地球公转轨道面投在天球上的影子。太阳一年沿着它走一圈；行星和月亮，也都挤在它附近 —— 因为大家的轨道，几乎落在同一个平面上。',
     run() { hideInfo(); setTab('body'); setEcl(true); setFov(72); } },
 
   { title: '② 黄道十二星座',
-    text: () => `切到「黄道十二星座」，此刻地平上最高的是${(selectedConst >= 0 && selectedConst < CONSTS.length ? CONSTS[selectedConst] : CONSTS[highestConst()]).cn}。星座是恒星在天球上的视觉组合，同一星座的星彼此往往相隔几十到上千光年，只是从地球看过去恰好挨在一起。`,
+    audio: 'assets/tour/nar-2.mp4',
+    text: '切到黄道十二星座。此刻地平线上最高的那个星座，已经把它的星连了起来。星座，只是星星在天球上的视觉组合 —— 同一个星座里的星，彼此往往相隔几十到上千光年，只不过从地球上望过去，恰好挨在一起。',
     run() {
       const i = highestConst();
       setTab('const');
@@ -1957,7 +3181,8 @@ const TOUR = [
     } },
 
   { title: '③ 行星也在黄道上',
-    text: () => `回到太阳系：${tourPlanet >= 0 ? currentEphem[tourPlanet].cn + '此刻' : '行星'}也在黄道附近。区别在于——星座是“不动”的背景，行星会走，它们是真的在天上挪位置。右下角把时间调快，就能看到行星沿黄道移动。`,
+    audio: 'assets/tour/nar-3.mp4',
+    text: '回到太阳系。行星也都在黄道附近。区别在于 —— 星座是几乎不动的背景，而行星会走，它们是真的在天上挪位置。把右下角的时间调快，就能看见行星沿着黄道移动。',
     run() {
       setTab('body');
       tourPlanet = bestPlanet(true);
@@ -1966,10 +3191,65 @@ const TOUR = [
     } },
 
   { title: '④ 岁差与蛇夫座',
-    text: '最后打开「黄道科普」：黄道、黄道带、宫≠星座、岁差，以及为什么蛇夫座是第 13 个黄道星座。',
-    ms: 14000,
+    audio: 'assets/tour/nar-4.mp4',
+    text: '最后，打开黄道科普。黄道和宫，不是一回事；岁差会让星座慢慢移位；而蛇夫座，是第十三个黄道星座。',
     run() { showInfo(); } },
 ];
+
+/* 「光走了多久」：一条尺度阶梯，从最近的恒星走到类星体，每步只讲一句“光走了多久” */
+const LIGHTTOUR = FAMOUS.map((f, i) => ({
+  title: `${{1:'①',2:'②',3:'③',4:'④',5:'⑤',6:'⑥',7:'⑦',8:'⑧'}[i + 1]} ${f.cn} · ${f.dist}`,
+  audio: `assets/tour/light-${i + 1}.wav`,
+  text: FAMOUS_SAY[f.key],
+  ms: 7000,
+  run() {
+    setTab('stars');
+    if (state.fov > 52) setFov(52);
+    showFamousCard(i);
+    // 转到这颗星上：在地平线下就把钟拨到它升起的时候，然后再对准
+    const r = focusFamous(i, { fly: true });
+    if (!r.ok) toast(`${f.cn} 在南天 · 南京纬度看不到，卡片里是它真实的距离`);
+    else if (r.raised && window.innerWidth > 860) {
+      const d = new Date(state.timeMs);
+      toast(`观测时刻 → ${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}（它在这时才升到天上）`, 2000);
+    }
+  },
+}));
+
+let TOUR = SYSTOUR;            // 当前正在跑的那条动线
+
+/* 旁白：女声、每步一段，讲完才进下一步；讲的时候把夜曲压低一档 */
+const narEl = new Audio();
+narEl.preload = 'auto';
+const narDur = new Map();       // 音频路径 → 时长（两条动线共用一张表）
+function probeDur(path) {
+  if (!path || narDur.has(path)) return;
+  narDur.set(path, 0);
+  const probe = new Audio(path);
+  probe.preload = 'metadata';
+  probe.addEventListener('loadedmetadata', () => narDur.set(path, probe.duration || 0));
+}
+SYSTOUR.concat(LIGHTTOUR).forEach(st => probeDur(st.audio));
+function narSpeak(i) {
+  const st = TOUR[i];
+  narEl.pause();
+  if (!st || !st.audio) return;
+  narEl.src = st.audio;
+  narEl.currentTime = 0;
+  const pr = narEl.play();
+  if (pr && pr.catch) pr.catch(() => {});   // 没手势（?tour=1 自动起播）就静音跑，节奏不受影响
+  if (typeof bgmDuck === 'function') bgmDuck(true);
+}
+function narStop() {
+  narEl.pause();
+  if (typeof bgmDuck === 'function') bgmDuck(false);
+}
+function stepMs(i) {
+  const st = TOUR[i];
+  const d = st && st.audio ? (narDur.get(st.audio) || 0) : 0;
+  if (d > 0.5) return d * 1000 + 1600;      // 讲完留一口气
+  return (st && st.ms) || STEP_MS;
+}
 
 function tourRender() {
   const st = TOUR[tour.idx];
@@ -1983,8 +3263,9 @@ function tourRender() {
   tourProg.style.width = '0%';
 }
 
-function tourStart() {
+function tourStart(plan) {
   if (!state.ready) return;
+  TOUR = plan === 'light' ? LIGHTTOUR : SYSTOUR;
   tour.on = true; tour.idx = -1; tour.paused = false;
   tour.prevFov = state.fov;
   document.getElementById('tourPause').textContent = '暂停';
@@ -1994,15 +3275,31 @@ function tourStart() {
   document.getElementById('panel').style.pointerEvents = 'none';
   tourNext();
 }
+function tourEnd() {
+  // 黄道科普讲完，收尾：收弹窗、镜头回入场原点，再给一张「演示结束」的卡片
+  hideInfo();
+  hideCard();                        // 收掉最后一步留下的星卡，别在收束画面里挂着
+  tourStop(true);
+  resetView();                       // 回到入场时的取景（正北 · 抬头 16°，草原在下）
+  document.getElementById('tourEnd').classList.add('on');
+  narEl.pause();
+  narEl.src = 'assets/tour/nar-5.mp4';
+  narEl.currentTime = 0;
+  const pr = narEl.play();
+  if (pr && pr.catch) pr.catch(() => {});
+}
+
 function tourNext() {
   tour.idx++;
-  if (tour.idx >= TOUR.length) { tourStop(true); return; }
+  if (tour.idx >= TOUR.length) { tourEnd(); return; }
   TOUR[tour.idx].run();
+  narSpeak(tour.idx);
   tour.t0 = performance.now();
   tourRender();
 }
 function tourStop(keep) {
   tour.on = false;
+  narStop();
   tourbar.classList.remove('on');
   tourTitle.textContent = '—';
   if (!keep) hideInfo();          // 手动退出：一并收起弹窗；自然播完则留在屏幕上
@@ -2015,23 +3312,54 @@ function tourTick(now) {
   if (!tour.on) return;
   if (tour.paused) return;
   const t = now - tour.t0;
-  const ms = TOUR[tour.idx].ms || STEP_MS;
+  const ms = stepMs(tour.idx);
   tourProg.style.width = `${Math.min(100, (t / ms) * 100).toFixed(1)}%`;
   if (t >= ms) tourNext();
 }
 
-document.getElementById('btnTour').addEventListener('click', () => {
-  if (tour.on) tourStop();
-  else { document.getElementById('btnTour').classList.add('on'); tourStart(); }
+/* 演示按钮：点开下拉，选一条动线；动线在跑时点它就是退出 */
+const tourMenuEl = document.getElementById('tourMenu');
+const btnTourEl = document.getElementById('btnTour');
+function tourMenuOpen(v) { tourMenuEl.classList.toggle('on', v); }
+btnTourEl.addEventListener('click', (e) => {
+  if (tour.on) { tourStop(); tourMenuOpen(false); return; }
+  tourMenuOpen(!tourMenuEl.classList.contains('on'));
+  e.stopPropagation();
 });
+tourMenuEl.addEventListener('click', (e) => {
+  const k = e.target.closest('.tm');
+  if (!k) return;
+  tourMenuOpen(false);
+  btnTourEl.classList.add('on');
+  tourStart(k.dataset.k);
+});
+document.addEventListener('pointerdown', (e) => {
+  if (tourMenuEl.classList.contains('on') && !e.target.closest('.tourwrap')) tourMenuOpen(false);
+});
+/* 老链接 ?tour=1 仍然跑「系统演示」；进场（state.ready）之前起不来，就等一会儿再试 */
+if (new URLSearchParams(location.search).get('tour') === '1') {
+  const autoTour = () => {
+    if (state.ready) { btnTourEl.classList.add('on'); tourStart('sys'); return; }
+    setTimeout(autoTour, 400);
+  };
+  setTimeout(autoTour, 600);
+}
 document.getElementById('tourPause').addEventListener('click', (e) => {
   if (!tour.on) return;
   tour.paused = !tour.paused;
-  if (tour.paused) { tour.held = performance.now() - tour.t0; }
-  else { tour.t0 = performance.now() - tour.held; }
+  if (tour.paused) { tour.held = performance.now() - tour.t0; narEl.pause(); }
+  else { tour.t0 = performance.now() - tour.held; narEl.play().catch(() => {}); }
   e.currentTarget.textContent = tour.paused ? '继续' : '暂停';
 });
 document.getElementById('tourExit').addEventListener('click', () => tourStop(false));
+document.getElementById('tourDone').addEventListener('click', () => {
+  document.getElementById('tourEnd').classList.remove('on');
+});
+document.getElementById('tourAgain').addEventListener('click', () => {
+  document.getElementById('tourEnd').classList.remove('on');
+  document.getElementById('btnTour').classList.add('on');
+  tourStart();
+});
 
 function applyConstVisual() {
   document.getElementById('btnConst').classList.toggle('on', state.showConst);
@@ -2067,6 +3395,66 @@ document.getElementById('btnGeo').addEventListener('click', () => {
 document.getElementById('btnNow').addEventListener('click', () => {
   state.timeMs = Date.now(); refreshEphem(true);
 });
+
+/* ------------------------------------------ 入场前：自动定位 + 校时（遮罩回显） */
+const p2 = (n) => String(n).padStart(2, '0');
+
+function setProbe(id, cls, txt) {
+  const row = document.getElementById(id);
+  const dot = document.getElementById(id + 'Dot');
+  const t = document.getElementById(id + 'Txt');
+  if (!row || !dot || !t) return;
+  dot.className = cls === 'ok' ? 'ok' : cls === 'no' ? 'no' : '';
+  t.textContent = txt;
+  row.classList.add('in');
+}
+
+function probeTime() {
+  const now = new Date();
+  const off = -now.getTimezoneOffset() / 60;
+  const offStr = `UTC${off >= 0 ? '+' : '−'}${Number.isInteger(off) ? Math.abs(off) : Math.abs(off).toFixed(1)}`;
+  // 恒星时随经度变，所以定位回来之后要再算一次
+  const lstH = (((lstRad(state.timeMs) / DEG) / 15) % 24 + 24) % 24;
+  const lstStr = `${p2(Math.floor(lstH))}:${p2(Math.floor((lstH % 1) * 60))}`;
+  // 白天打开会自动落到 21:30，那一刻的"观测时刻"和本机时钟不是一回事，得写清楚
+  const drift = Math.abs(now.getTime() - state.timeMs);
+  const obs = new Date(state.timeMs);
+  const obsStr = drift > 90e3
+    ? ` · 观测 ${p2(obs.getMonth() + 1)}-${p2(obs.getDate())} ${p2(obs.getHours())}:${p2(obs.getMinutes())}`
+    : '';
+  setProbe('stTime', 'ok',
+    `校时 ${p2(now.getMonth() + 1)}-${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())} · ${offStr} · 恒星时 ${lstStr}${obsStr}`);
+}
+
+function probeGeo() {
+  const q = new URLSearchParams(location.search);
+  const pinLat = parseFloat(q.get('lat')), pinLon = parseFloat(q.get('lon'));
+  if (isFinite(pinLat) && isFinite(pinLon)) {
+    setProbe('stGeo', 'ok', `定位 按链接参数 · ${(LAT / DEG).toFixed(2)}°N ${LONGITUDE.toFixed(2)}°E`);
+    return;
+  }
+  const site = `${(LAT / DEG).toFixed(2)}°N ${LONGITUDE.toFixed(2)}°E`;
+  if (!navigator.geolocation) { setProbe('stGeo', 'no', `定位 浏览器不支持 · 用默认 ${site}`); return; }
+  // geolocation 只在 secure context 可用：localhost / HTTPS 行，裸 http 公网会被浏览器直接拒
+  if (!window.isSecureContext) { setProbe('stGeo', 'no', `定位 需 HTTPS · 用默认 ${site}`); return; }
+  setProbe('stGeo', '', '定位中…（浏览器会询问一次权限）');
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      setSite(pos.coords.latitude, pos.coords.longitude);
+      setProbe('stGeo', 'ok',
+        `定位 ${(LAT / DEG).toFixed(2)}°N ${LONGITUDE.toFixed(2)}°E` + (pos.coords.accuracy > 2000 ? '（精度较低）' : ''));
+      probeTime();                       // 经度变了，地方恒星时要重算
+    },
+    (err) => {
+      const why = err && err.code === 1 ? '未授权' : err && err.code === 3 ? '超时' : '定位失败';
+      setProbe('stGeo', 'no', `${why} · 用默认 ${site}`);
+    },
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+  );
+}
+
+probeTime();
+probeGeo();
 const pauseBtn = document.getElementById('btnPause');
 const speedBtns = [...document.querySelectorAll('#speed .s[data-k]')];
 function applySpeedVisual() {
@@ -2078,6 +3466,10 @@ function applySpeedVisual() {
 document.getElementById('speed').addEventListener('click', (e) => {
   const t = e.target.closest('.s');
   if (!t) return;
+  if (t.id === 'btnReset') {
+    resetView();
+    return;
+  }
   if (t.id === 'btnPause') {
     // 一个按钮两种状态：跑着就暂停，停着就开始（回到暂停前的倍速）
     if (state.speed > 0) { state.lastSpeed = state.speed; state.speed = 0; }
@@ -2088,6 +3480,64 @@ document.getElementById('speed').addEventListener('click', (e) => {
   applySpeedVisual();
 });
 applySpeedVisual();
+
+/* --------------------------------------------------------- 背景夜曲 */
+/* 草原夜的氛围声：夜风 + 远处虫鸣 + 低频铺底，106 秒无缝循环。
+   浏览器禁止无手势自动播放，所以挂在「入 夜」这一下点击上，边进场边淡入。 */
+const bgmEl = document.getElementById('bgm');
+const bgmBtn = document.getElementById('btnBgm');
+const BGM_VOL = 0.34;
+let bgmFadeTimer = 0;
+let bgmWanted = (localStorage.getItem('xy_bgm') ?? '1') !== '0';
+
+function bgmFadeTo(target, ms = 2600) {
+  if (!bgmEl) return;
+  clearInterval(bgmFadeTimer);
+  const from = bgmEl.volume, t0 = performance.now();
+  bgmFadeTimer = setInterval(() => {
+    const k = Math.min(1, (performance.now() - t0) / ms);
+    const e = k * k * (3 - 2 * k);
+    bgmEl.volume = Math.max(0, Math.min(1, from + (target - from) * e));
+    if (k >= 1) { clearInterval(bgmFadeTimer); bgmEl.volume = target; }
+  }, 50);
+}
+
+/* 旁白说话时把夜曲压低，讲完再抬回来 */
+let bgmDucked = false;
+function bgmDuck(on) {
+  if (!bgmEl) return;
+  bgmDucked = on;
+  if (bgmEl.paused) return;
+  bgmFadeTo(on ? Math.min(0.10, BGM_VOL) : BGM_VOL, on ? 600 : 1800);
+}
+
+function bgmStart() {
+  if (!bgmEl || !bgmWanted) return;
+  if (!bgmEl.paused && bgmEl.volume > 0.01) return;
+  bgmEl.volume = 0;
+  const pr = bgmEl.play();
+  if (pr && pr.catch) pr.catch(() => {});       // 没有手势就不硬来
+  bgmFadeTo(BGM_VOL, 3200);
+}
+
+function bgmSet(on, remember = true) {
+  bgmWanted = on;
+  bgmBtn.classList.toggle('on', on);
+  if (remember) localStorage.setItem('xy_bgm', on ? '1' : '0');
+  if (on) bgmStart();
+  else { bgmFadeTo(0, 900); setTimeout(() => { if (!bgmWanted) bgmEl.pause(); }, 950); }
+}
+bgmBtn.classList.toggle('on', bgmWanted);
+bgmBtn.addEventListener('click', () => bgmSet(!bgmWanted));
+
+/* --------------------------------------------------------- 视角还原 */
+/* "最初的位置" = 入场落地那一刻的取景：正北、略微抬头，地平线和草原留在画面下方 */
+const VIEW_HOME = { yaw: 0, pitch: 0.28 };
+function resetView() {
+  state.focus = { yaw: VIEW_HOME.yaw, pitch: VIEW_HOME.pitch };
+  state.velocity = 0;
+  toast('已还原到入场时的取景（正北 · 抬头 16°）');
+}
 
 /* ----------------------------------------------------- 对准某颗天体 */
 function focusBody(i) {
@@ -2180,9 +3630,12 @@ function tick() {
   const dt = Math.min(0.05, (now - t0) / 1000);
   t0 = now;
 
-  // 时间推进：1× = 真实流逝；惯性衰减
+  // 太阳特写期间由它自己接管这一帧（换场景、渲染、推进时间都给太阳）
+  if (sunViewTick(now)) { requestAnimationFrame(tick); return; }
+
+  // 时间推进：1× = 真实流逝；入场时叠一个 CINE.boost（7200×）做"斗转"；惯性衰减
   if (!state.dragging) {
-    state.timeMs += dt * state.speed * 1000;
+    state.timeMs += dt * (state.speed + (CINE.active ? CINE.boost : 0)) * 1000;
     if (Math.abs(state.velocity) > 1e-4) {
       state.timeMs += state.velocity * dt * 3600e3;
       state.velocity *= Math.exp(-dt * 2.2);
@@ -2197,17 +3650,27 @@ function tick() {
   U.uSky.value.copy(sky);
   U.uSkyInv.value.copy(sky).transpose();
 
-  // 相机
-  if (state.focus) {
-    state.yaw += (state.focus.yaw - state.yaw) * Math.min(1, dt * 4.2);
-    state.pitch += (state.focus.pitch - state.pitch) * Math.min(1, dt * 4.2);
-    if (Math.abs(state.focus.yaw - state.yaw) < 0.002 && Math.abs(state.focus.pitch - state.pitch) < 0.002) state.focus = null;
+  // 相机：入场期间由 cineTick 全权接管（高度/滚转/俯仰/视场/模糊）
+  if (CINE.active) {
+    cineTick(now);
+  } else {
+    // 触摸松手后的滑行：指数衰减，转到底自然停住
+    if (!state.dragging && state.vYaw) {
+      state.yaw += state.vYaw * dt;
+      state.vYaw *= Math.exp(-dt / 0.42);
+      if (Math.abs(state.vYaw) < 0.006) state.vYaw = 0;
+    }
+    if (state.focus) {
+      state.yaw += (state.focus.yaw - state.yaw) * Math.min(1, dt * 4.2);
+      state.pitch += (state.focus.pitch - state.pitch) * Math.min(1, dt * 4.2);
+      if (Math.abs(state.focus.yaw - state.yaw) < 0.002 && Math.abs(state.focus.pitch - state.pitch) < 0.002) state.focus = null;
+    }
+    camera.rotation.y = state.yaw;
+    camera.rotation.x = state.pitch;
   }
-  camera.rotation.y = state.yaw;
-  camera.rotation.x = state.pitch;
   updateCompass(false);
   if (!scrubHeld) scrubSyncValue();
-  if (Math.abs(state.fovTarget - state.fov) > 0.005) {
+  if (!CINE.active && Math.abs(state.fovTarget - state.fov) > 0.005) {
     state.fov += (state.fovTarget - state.fov) * Math.min(1, dt * 9);
     camera.fov = state.fov;
     camera.updateProjectionMatrix();
@@ -2224,7 +3687,8 @@ function tick() {
 
   updateBodies(sky);
   updateEcliptic();
-  if (state.showConst) updateConst(sky);
+  if (state.showConst) updateConst(sky); else updateFamous(sky);
+  fMat.uniforms.uTime.value = now / 1000;   // 准星呼吸
 
   // 太阳高度 → 天光
   const sunAlt = bodyWorld[0].y / SKY_R;
@@ -2268,51 +3732,241 @@ function tick() {
 }
 
 /* ---------------------------------------------------------------- 入夜 */
-function enterNight() {
-  if (booted) return;
-  booted = true;
-  const boot = document.getElementById('boot');
-  boot.classList.add('hide');
-  document.getElementById('hud').style.opacity = '1';
-  state.ready = true;
-  applyConstVisual();
+/*
+ * 入场是一段四拍的镜头，不是一次淡入：
+ *   ① 苏醒   —— 星星从暗里亮起来
+ *   ② 斗转   —— 时间倍率飙到 7200×，天球整体飞转，径向模糊把星光抹成流向
+ *   ③ 下坠   —— 相机高度 150 → 3，几何地平线自己升上来（真实透视，不是假动画）
+ *   ④ 触地 / 抬望眼 —— 落地一次过冲回弹 + 轻微震屏，再把视线抬到 +0.55
+ * 全程只改 6 个量：时间倍率、相机 y / rotation.z、pitch、fov、uReveal、uWarp。
+ */
+const CINE = {
+  active: false,
+  t0: 0,
+  dur: 4.0,
+  fovEnd: 58,
+  pitchEnd: 0.28,
+  pitchStart: 0.50,
+  camY: 3,
+  dropY: 150,
+  boost: 0,
+  skipped: false,
+  hold: -1,
+};
+
+const lerp = (a, b, k) => a + (b - a) * k;
+const seg = (t, a, b) => Math.max(0, Math.min(1, (t - a) / (b - a)));
+const ease = (x) => x * x * (3 - 2 * x);
+window.__cine = CINE;      // 调试用：可以把 t0 往前挪，定格看某一段
+
+function cineStart() {
+  const q = new URLSearchParams(location.search);
+  CINE.active = true;
+  CINE.t0 = performance.now();
+  CINE.skipped = false;
+  CINE.dur = q.get('cine') === 'fast' ? 2.6 : 4.0;
+  // ?cineT=0.55 可以定格在序列的某一点（调参、截图用）
+  const holdT = parseFloat(q.get('cineT'));
+  CINE.hold = isFinite(holdT) ? Math.max(0, Math.min(0.995, holdT)) : -1;
+  CINE.fovEnd = state.fov;
+  const pinPitch = parseFloat(q.get('pitch'));
+  CINE.pitchEnd = isFinite(pinPitch) ? pinPitch : 0.28;
+  // 直接接管相机，先把它抬到空中
+  camera.position.set(0, CINE.dropY, 0);
+  camera.rotation.z = 0;
+  document.getElementById('hud').style.opacity = '0';
+  document.getElementById('hud').style.pointerEvents = 'none';
+  U.uReveal.value = 0.02;
+  U.uLines.value = 0.02;
+  WARP.value = 0;
+}
+
+function cineSkip() {
+  if (!CINE.active) return;
+  CINE.skipped = true;
+}
+
+function cineTick(now) {
+  const t = CINE.hold >= 0 ? CINE.hold : Math.min(1, (now - CINE.t0) / (CINE.dur * 1000));
+
+  // —— 时间倍率：起飞 → 巡航 → 触地前收油
+  CINE.boost = 7200 * ease(seg(t, 0.10, 0.28)) * (1 - 0.985 * ease(seg(t, 0.46, 0.72)));
+
+  // —— 星亮度：先透出一层微光，落地后才满亮
+  if (t < 0.52) {
+    U.uReveal.value = lerp(0.02, 0.30, ease(seg(t, 0.0, 0.13)));
+  } else {
+    U.uReveal.value = lerp(0.30, 1.0, ease(seg(t, 0.74, 0.98)));
+  }
+  U.uLines.value = U.uReveal.value;
+
+  // —— 视场：先撑开到 104°（广角畸变就是"速度感"），落地后收回
+  let fov;
+  if (t < 0.32) fov = lerp(CINE.fovEnd, 104, ease(seg(t, 0.08, 0.32)));
+  else if (t < 0.72) fov = 104;
+  else fov = lerp(104, CINE.fovEnd, ease(seg(t, 0.72, 0.98)));
+  state.fov = state.fovTarget = fov;
+  camera.fov = fov;
+  camera.updateProjectionMatrix();
+  U.uFov.value = fov;
+
+  // —— 滚转：斗转时压一个 8° 的侧倾，落地前回正
+  camera.rotation.z = -0.14 * ease(seg(t, 0.10, 0.34)) * (1 - ease(seg(t, 0.50, 0.72)));
+
+  // —— 高度：0.36 之后开始下坠，二次缓入（越接近地面越快）
+  let camY = CINE.dropY;
+  if (t > 0.34) {
+    camY = lerp(CINE.dropY, CINE.camY, Math.pow(seg(t, 0.34, 0.72), 2));
+  }
+  let shake = 0;
+  if (t >= 0.72 && t < 0.84) {
+    const k = seg(t, 0.72, 0.84);
+    camY = CINE.camY - 0.85 * Math.sin(k * Math.PI);          // 落地过冲 + 回弹
+    shake = Math.sin(k * Math.PI) * 0.022;
+  }
+  camera.position.set((Math.random() - 0.5) * shake, camY, 0);
+
+  // —— 俯仰：先仰头看星，下坠时压到贴地平，落地后抬望眼
+  let pitch;
+  if (t < 0.36) pitch = CINE.pitchStart;
+  else if (t < 0.74) pitch = lerp(CINE.pitchStart, -0.16, ease(seg(t, 0.36, 0.74)));
+  else pitch = lerp(-0.16, CINE.pitchEnd, ease(seg(t, 0.76, 1.0)));
+  state.pitch = pitch;
+
+  // —— 径向模糊
+  let warp = ease(seg(t, 0.12, 0.32));
+  if (t > 0.60) warp *= (1 - 0.58 * ease(seg(t, 0.60, 0.72)));
+  if (t >= 0.72 && t < 0.84) warp = Math.max(warp, 0.40 * Math.sin(seg(t, 0.72, 0.84) * Math.PI));
+  if (t > 0.84) warp = lerp(warp, 0, ease(seg(t, 0.84, 1.0)));
+  WARP.value = warp;
+
+  camera.rotation.x = pitch;
+  camera.rotation.y = state.yaw;
+
+  if (CINE.hold >= 0) return;
+  if (t >= 1 || CINE.skipped) landNow();
+}
+
+const toastEl = document.getElementById('toast');
+let toastTimer = 0;
+function toast(msg, ms = 3200) {
+  if (!toastEl) return;
+  toastEl.textContent = msg;
+  toastEl.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('on'), ms);
+}
+
+/* 进入主页面后的第一件事：把时刻拨回"现在"，再去找此刻该看的那颗星。
+   白昼（太阳在地平线以上）→ 对准太阳；夜里 → 对准北极星。
+   北极星并非任何地方都看得到：赤纬 +89.3°，只有北纬 ≥0.7° 才永远在地平线上，
+   低纬它贴着地平线、南半球直接在地平线下 —— 所以带上纬度兜底。 */
+/* 对准一个天体，但不硬居中：把目标推到画面上部，下半留出天空和草原。
+   正中的话太阳（高度 30°+）会把地平线挤出画面，"抬望眼 + 脚下一片草"就没了。 */
+function aimAt(dir) {
+  const d = dir.clone().normalize();
+  const alt = Math.asin(Math.max(-1, Math.min(1, d.y)));
+  const halfV = state.fov * DEG / 2;                 // 竖直半视场（state.fov 是角度）
+  const pitch = Math.max(0.09, Math.min(0.55, alt - 0.62 * halfV));
+  state.focus = { yaw: Math.atan2(-d.x, -d.z), pitch };
+}
+
+function gotoNow() {
+  const q = new URLSearchParams(location.search);
+  if (q.get('at') || q.get('yaw') || q.get('pitch')) return;   // 分享链接钉住的不抢
+  // 位置必须用"此刻"的恒星时现算：bodyWorld / cWorld 是上一帧的，入场 boost 期间差得很远
+  const sky = skyMatrix(lstRad(state.timeMs));
+
+  const sun = currentEphem[0].eq.clone().applyMatrix3(sky).normalize();
+  if (sun.y > 0) {                                  // 太阳在地平线以上 = 白天
+    aimAt(sun);
+    toast(`此刻是白天 · ${pad2(new Date().getHours())}:${pad2(new Date().getMinutes())} 太阳在地平线上，已对准`);
+    return;
+  }
+
+  const polaris = cStars[POLARIS_STAR].dir.clone().applyMatrix3(sky).normalize();
+  const latDeg = LAT / DEG;
+  if (polaris.y > 0.02 && latDeg >= 3) {
+    aimAt(polaris);
+    toast(`此刻是夜 · 已对准北极星（高度约 ${(Math.asin(polaris.y) / DEG).toFixed(0)}°，正北）`);
+  } else {
+    // 纬度太低 / 南半球：北极星贴地平线或在地平线以下，硬对准会盯住一片黑
+    state.focus = { yaw: 0, pitch: 0.10 };           // 正北天区 + 地平线，草地在下方
+    toast(`本地（${latDeg.toFixed(1)}°）看不到北极星 · 已对准正北方的天区`);
+  }
+}
+
+function landNow() {
+  if (!CINE.active) return;
+  CINE.active = false;
+  CINE.boost = 0;
+  U.uReveal.value = 1;
+  U.uLines.value = 1;
+  WARP.value = 0;
+  camera.position.set(0, 3, 0);
+  camera.rotation.z = 0;
+  state.pitch = CINE.pitchEnd;
+  state.fov = state.fovTarget = CINE.fovEnd;
+  camera.fov = state.fov;
+  camera.updateProjectionMatrix();
+  U.uFov.value = state.fov;
+  // 入场时 7200× 的 boost 让 timeMs 跑掉了好几个小时，落地这一下拨回真实时刻，
+  // 跳变正好藏在"触地震屏 + 回弹"里，等构图定格后再去对准目标
+  if (!new URLSearchParams(location.search).get('at')) {
+    state.timeMs = Date.now();
+    refreshEphem(true);
+  }
+
+  const hud = document.getElementById('hud');
+  hud.style.opacity = '1';
+  hud.style.pointerEvents = '';
+
+  // 落地后**不再**自动对准天体：那一下会把视线抬到天上，草原就出画了。
+  // 终帧保持"抬望眼 + 脚下一片草"的构图，要看哪颗天体让用户自己点。
+  // 先让"抬望眼 + 脚下一片草"的终帧定格一会儿，再平滑转到此刻该看的天体
+  setTimeout(gotoNow, 1400);
+
   const q = new URLSearchParams(location.search);
   if (q.get('info')) setTimeout(showInfo, 900);
   if (q.get('tour')) setTimeout(() => { document.getElementById('btnTour').classList.add('on'); tourStart(); }, 1400);
-
-  // 揭示动画：亮度由 0 推上去
-  const t0r = performance.now();
-  const step = () => {
-    const t = Math.min(1, (performance.now() - t0r) / 1400);
-    const e = 1 - Math.pow(1 - t, 3);
-    U.uReveal.value = e;
-    U.uLines.value = e;
-    if (t < 1) requestAnimationFrame(step);
-  };
-  step();
-
-  // 自动对准：在可见天体里挑"够高、够亮"的一颗开场
-  const best = currentEphem
-    .map((b, i) => ({ i, b, alt: bodyWorld[i].y / SKY_R }))
-    .filter(o => o.alt > 0.12 && o.b.key !== 'sun')
-    .sort((a, b2) => (b2.alt * 0.6 + (-b2.b.mag) * 0.4) - (a.alt * 0.6 + (-a.b.mag) * 0.4))[0];
-  const pinned = new URLSearchParams(location.search).get('yaw');
-  if (best && !pinned) {
-    const w = bodyWorld[best.i].clone().normalize();
-    state.yaw = Math.atan2(-w.x, -w.z);
-    state.pitch = Math.min(0.62, Math.max(0.18, Math.asin(w.y)));
-    state.focus = { yaw: state.yaw, pitch: state.pitch };
-  }
-
   setTimeout(() => { hintEl.style.opacity = '0'; }, 5200);
 }
-document.getElementById('enter').addEventListener('click', enterNight);
+
+function enterNight() {
+  if (booted) return;
+  booted = true;
+  document.getElementById('boot').classList.add('hide');
+  state.ready = true;
+  applyConstVisual();
+  const cine = new URLSearchParams(location.search).get('cine');
+  if (cine === '0') {
+    // 直接落到终态：截图、调试、或者不喜欢动画的人用
+    CINE.fovEnd = state.fov;
+    CINE.pitchEnd = state.pitch;
+    CINE.active = true;          // landNow 会把它关掉
+    landNow();
+  } else {
+    cineStart();
+  }
+}
+document.getElementById('enter').addEventListener('click', () => {
+  bgmStart();                       // 夜曲随入场一起淡入（挂在手势上，才不会被打回）
+  enterNight();
+});
 document.getElementById('boot').addEventListener('click', enterNight);
 
 /* --------------------------------------------------------------- 启动 */
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
+  // composer 的 RT 要跟 canvas 的物理像素对齐：只给 CSS 尺寸的话，
+  // 高 dpr 屏上后处理只画到画布左上角一块（手机尤其明显，桌面因为被终局 quad 拉伸才不明显）
+  // 触摸设备像素密集、GPU 弱：1.75 会很吃力，滑起来发涩，收一档到 1.5
+  const dpr = Math.min(window.devicePixelRatio || 1, TOUCHY ? 1.5 : 1.75);
+  renderer.setPixelRatio(dpr);
   renderer.setSize(w, h);
+  if (composer && composer.setPixelRatio) composer.setPixelRatio(dpr);
+  viewCam.aspect = w / h;
+  viewCam.updateProjectionMatrix();
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   composer?.setSize?.(w, h);
@@ -2407,8 +4061,36 @@ setInterval(() => {
     el.style.opacity = '0.8';
   });
 
-  // 星座/星群：卡片与名标跟着星座中心；单星则跟着那颗星
-  if (selectedStar >= 0) {
+  // 尺度阶梯：名标跟着点位，和「标签」开关同步
+  for (let i = 0; i < FAMOUS.length; i++) {
+    const w = fWorld[i];
+    if (!w) continue;
+    const p = w.clone().project(camera);
+    const el = flabelEls[i];
+    const alt = w.clone().normalize().y;
+    // 这 8 个是「光走了多久」的目标：标签常显，不跟「标签」开关走
+    const on = p.z < 1 && p.x > -1.05 && p.x < 1.05 && Math.abs(p.y) < 1.05 && alt > 0.02;
+    if (!on) { el.style.opacity = '0'; continue; }
+    const sx = (p.x * 0.5 + 0.5) * window.innerWidth;
+    const sy = (-p.y * 0.5 + 0.5) * window.innerHeight;
+    el.style.transform = `translate(${sx}px, ${sy}px) translate(-50%,-150%)`;
+    el.style.opacity = '0.92';
+  }
+
+  // 尺度阶梯天体
+  if (selectedFamous >= 0) {
+    const w = fWorld[selectedFamous].clone();
+    const p = w.clone().project(camera);
+    const sx = (p.x * 0.5 + 0.5) * window.innerWidth;
+    const sy = (-p.y * 0.5 + 0.5) * window.innerHeight;
+    // 目标在地平线下（南门二）时屏幕上没有可依附的位置，卡片退回右上角
+    if (p.z < 1 && w.y / SKY_R > 0.0) placeCard(sx, sy);
+    else {
+      cardEl.style.left = `${Math.max(12, window.innerWidth - (cardEl.offsetWidth || 236) - 26)}px`;
+      cardEl.style.top = '118px';
+    }
+    clabEl.style.opacity = '0';
+  } else if (selectedStar >= 0) {
     const w = cWorld[selectedStar].clone();
     const p = w.clone().project(camera);
     const sx = (p.x * 0.5 + 0.5) * window.innerWidth;
