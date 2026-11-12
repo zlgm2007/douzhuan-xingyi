@@ -284,6 +284,8 @@
   <div class="err" id="bootErr"></div>
 </div>
 
+<audio id="bgm" src="assets/night-ambience.mp4" loop preload="auto"></audio>
+
 <div class="hud" id="hud">
   <div class="brand">
     <h1>星野</h1>
@@ -296,6 +298,7 @@
     <div class="pill on" id="btnConst">星座</div>
     <div class="pill" id="btnTour">演示</div>
     <div class="pill" id="btnInfo">黄道科普</div>
+    <div class="pill on" id="btnBgm">夜曲</div>
     <div class="pill" id="btnGeo">定位</div>
     <div class="pill" id="btnNow">现在</div>
   </div>
@@ -487,15 +490,26 @@ function buildCatalog(n) {
   const m0 = -1.5, m1 = 7.4;
   const k = 0.45;
   const A = Math.pow(10, k * m0), B = Math.pow(10, k * m1) - A;
+  // 银道面聚集：真实夜空里银纬 |b|<10° 的星数远多于极区，
+  // 银河"细砂"质感靠的就是这层没被分解的暗星，光靠 shader 画雾是画不出来的
+  const gp = new THREE.Vector3(
+    Math.cos(POLE_DEC) * Math.cos(POLE_RA), Math.cos(POLE_DEC) * Math.sin(POLE_RA), Math.sin(POLE_DEC));
+  const GAL_B = 0.34, GAL_MIN = 0.26;
   for (let i = 0; i < n; i++) {
-    const ra = Math.random() * Math.PI * 2;
-    const dec = Math.asin(Math.random() * 2 - 1);
+    let ra, dec, dx, dy, dz, sb;
+    do {
+      ra = Math.random() * Math.PI * 2;
+      dec = Math.asin(Math.random() * 2 - 1);
+      dx = Math.cos(dec) * Math.cos(ra); dy = Math.cos(dec) * Math.sin(ra); dz = Math.sin(dec);
+      sb = dx * gp.x + dy * gp.y + dz * gp.z;                 // sin(银纬)
+      const b = Math.asin(Math.max(-1, Math.min(1, sb)));
+      const pAccept = GAL_MIN + (1 - GAL_MIN) * Math.exp(-(b * b) / (GAL_B * GAL_B));
+      if (Math.random() < pAccept) break;
+    } while (true);
     const m = (1 / k) * Math.log10(A + Math.random() * B);
     const bv = Math.max(-0.4, Math.min(2.0, randn() * 0.55 - 0.08));
     const rgb = bvToRGB(bv);
-    dir[i * 3] = Math.cos(dec) * Math.cos(ra);
-    dir[i * 3 + 1] = Math.cos(dec) * Math.sin(ra);
-    dir[i * 3 + 2] = Math.sin(dec);
+    dir[i * 3] = dx; dir[i * 3 + 1] = dy; dir[i * 3 + 2] = dz;
     color[i * 3] = rgb[0]; color[i * 3 + 1] = rgb[1]; color[i * 3 + 2] = rgb[2];
     mag[i] = m;
     seed[i] = Math.random();
@@ -575,26 +589,75 @@ vec3 skyBase(vec3 d, float t){
   col += vec3(0.32, 0.14, 0.05) * exp(-pow((az - 0.95) / 0.38, 2.0)) * exp(-a * 18.0) * 0.18;
   return col;
 }
-vec3 milky(vec3 e, float g){
+/* 银河：在银道"角域"（银经 l、银纬 b）里做多尺度噪声。
+   旧版直接拿 b.xy 当噪声域，尺度不是角度、一放大就糊；这里换成角域 +
+   按视场加细节（越推近，细丝/星团越多），并保留脊状尘埃带的锐度。 */
+float mfbm3(vec2 p){ float v=0.0,a=0.55; for(int i=0;i<3;i++){ v+=a*vnoise(p); p=p*2.03+7.31; a*=0.5; } return v; }
+float mfbm4(vec2 p){ float v=0.0,a=0.55; for(int i=0;i<4;i++){ v+=a*vnoise(p); p=p*2.03+7.31; a*=0.5; } return v; }
+float mfbm5(vec2 p){ float v=0.0,a=0.55; for(int i=0;i<5;i++){ v+=a*vnoise(p); p=p*2.03+7.31; a*=0.5; } return v; }
+/* 脊状噪声：给尘埃带和电离氢细丝那种"线条感"，比普通 fbm 锐得多 */
+float mridge3(vec2 p){ float v=0.0,a=0.62; for(int i=0;i<3;i++){ float n=vnoise(p); v+=a*(1.0-abs(n*2.0-1.0)); p=p*2.11+11.7; a*=0.55; } return v; }
+
+vec3 milky(vec3 e, float g, float detail, float zoom){
   vec3 b = uEqToGal * e;
-  float bb = asin(clamp(b.z, -1.0, 1.0));
-  float l = atan(b.y, b.x);
+  float bb = asin(clamp(b.z, -1.0, 1.0));      // 银纬（rad）
+  float l  = atan(b.y, b.x);                    // 银经（rad，±π 处是反银心）
   float center = 0.5 + 0.5 * cos(l);
   float c2 = center * center;
-  float width = mix(0.07, 0.19, c2);
-  float warp = fbm(b.xy * 2.3 + vec2(0., 1.3)) - 0.5;
-  bb += warp * 0.055;
-  float band = exp(-bb*bb / (2.0 * width * width));
-  float broad = exp(-bb*bb / (2.0*0.3*0.3)) * 0.12;
-  float clouds = 0.5 + 0.5 * fbm(b.xy * 4.6 + vec2(2.0));
-  float fine = 0.62 + 0.38 * fbm(b.xy * 15.0 + vec2(5.0));
-  float laneN = fbm(b.xy * 7.2 + vec2(9.0));
-  float lane = smoothstep(0.45, 0.9, laneN) * exp(-pow(bb / (width * 0.5), 2.0));
-  float I = (band * clouds * fine + broad) * (0.26 + 0.95 * c2 + 0.2 * center);
-  I *= (1.0 - 0.82 * lane);
-  // 软饱和：银河是"一层薄雾"，无论多靠近银心都封顶，避免烧成白光
-  I = 0.62 * (1.0 - exp(-I * 1.35));
-  vec3 col = mix(vec3(0.40, 0.50, 0.88), vec3(1.0, 0.84, 0.66), smoothstep(0.15, 0.95, center) * band);
+  float edge = smoothstep(2.35, 3.05, abs(l));   // 反银心侧淡掉细节 + 抹掉接缝
+
+  // 角域坐标：沿银经稍拉长（旋臂本来就是纵向成条的）
+  vec2 q = vec2(l * 0.85, bb * 1.35);
+
+  float width = mix(0.070, 0.165, c2);
+  float wob = (mfbm3(q * 0.55 + 2.4) - 0.5) * 0.050;   // 中轴被低频掰弯
+  float bbw = bb - wob;
+  float band = exp(-bbw * bbw / (2.0 * width * width));
+  float halo = exp(-bbw * bbw / (2.0 * 0.30 * 0.30)) * 0.075;   // 外层晕收一点，少点"烟"
+
+  // 视场越窄，噪声域越放大 → 同一片天能看到更细的结构（推近不糊的关键）
+  float zo = clamp(58.0 / max(zoom, 6.0), 1.0, 5.0);
+
+  // 云团：中层结构（尺度固定在角度上）
+  float c1  = mfbm5(vec2(q.x * 2.2, q.y * 4.0) * (1.0 + (zo - 1.0) * 0.5 * detail) + 1.9);
+  float c2n = mfbm4(vec2(q.x * 6.0, q.y * 9.0) + 5.5);
+  float cloud = (0.34 + 0.66 * c1) * (0.62 + 0.42 * c2n);
+  cloud = clamp((cloud - 0.42) * 1.9 + 0.42, 0.0, 1.9);      // 提对比：亮星云/暗缝隙分开
+
+  // 高频层：只在推近时才明显
+  float d1 = mfbm4(vec2(q.x * 9.0, q.y * 13.0) * zo + 21.7);
+  float d2 = mfbm3(vec2(q.x * 23.0, q.y * 31.0) * zo + 31.3);
+  cloud *= 1.0 + ((d1 - 0.5) * 1.05 + (d2 - 0.5) * 0.85) * mix(0.40, 1.15, detail);
+  cloud = mix(cloud, 0.66, edge * 0.85);
+
+  // 暗尘埃带：脊状噪声 + 高阈值，出来的才是"带边界的黑缝"而不是灰雾
+  float laneA = mridge3(vec2(q.x * 4.5, q.y * 7.0) + 3.3);
+  float lane  = smoothstep(0.54, 0.90, laneA) * exp(-pow(bbw / (width * 0.55), 2.0)) * (0.50 + 0.50 * c2);
+  float lane2 = smoothstep(0.66, 0.95, mfbm3(vec2(q.x * 10.0, q.y * 14.0) + 8.8))
+                * exp(-pow(bbw / (width * 0.34), 2.0)) * detail;
+  // 细尘埃纤维：推近时补的锐度，让暗带不是一条平涂的灰带
+  float fil = mridge3(vec2(q.x * 17.0, q.y * 23.0) * zo + 41.0);
+  lane += smoothstep(0.58, 0.96, fil) * 0.45 * detail * exp(-pow(bbw / (width * 1.1), 2.0));
+  lane  = mix(lane,  0.0, edge * 0.9);
+  lane2 = mix(lane2, 0.0, edge * 0.9);
+
+  float I = (band * cloud + halo) * (0.24 + 1.00 * c2 + 0.16 * center);
+  I *= (1.0 - 0.85 * lane - 0.45 * lane2);
+
+  // 细颗粒：高频小幅调制。真银河照片的"质感"就来自这层颗粒，而不是一团平滑的雾
+  float grain = mfbm3(q * 22.0 * (0.6 + 0.7 * zoom / 58.0) + 13.0);
+  I *= 0.90 + 0.20 * grain;
+  // 屏幕空间颗粒（1 像素级）：银河"细砂"质感的来源，纯域噪声做不出来
+  float pg = hash21(gl_FragCoord.xy * 0.7 + 3.1);
+  I *= 0.88 + 0.26 * pg;
+
+  // 软饱和：压到"薄雾"这个量级，不烧成白团
+  I = 0.38 * (1.0 - exp(-I * 1.65));
+
+  vec3 cool = vec3(0.36, 0.47, 0.92);
+  vec3 warm = vec3(1.00, 0.86, 0.70);
+  vec3 col  = mix(cool, warm, smoothstep(0.10, 0.95, center) * band);
+  col = mix(col, vec3(0.52, 0.58, 0.95), 0.16 * laneA * band);   // 尘埃带偏冷蓝紫
   return col * I * g;
 }
 `;
@@ -631,8 +694,11 @@ const skyMat = new THREE.ShaderMaterial({
       vec3 col = skyBase(d, uTime);
       vec3 e = uSkyInv * d;
       float ext = exp(-0.22 * (airmass(d.y) - 1.0));
-      float mwFov = mix(0.55, 1.0, smoothstep(12.0, 42.0, uFov));
-      col += milky(e, uMilkyGain) * 0.80 * mwFov * smoothstep(5.2, 8.0, uLimitMag + 0.0) * ext
+      // 推近时同一片天空铺满全屏，必须压一点亮度，否则整块发白
+      float mwFov = mix(1.0, 0.52, smoothstep(40.0, 12.0, uFov));
+      float detail = mix(0.30, 1.0, smoothstep(46.0, 12.0, uFov));
+      col += milky(e, uMilkyGain, detail, uFov) * 0.85 * mwFov
+             * smoothstep(5.2, 8.0, uLimitMag + 0.0) * ext
              * smoothstep(-0.02, 0.06, d.y);
       // 日间：太阳在地平以上时，天空被天光整体提亮（视觉上不是"黑天挂太阳"）
       // 本页是"夜空观测"模式：白天只留一层很淡的天光，不把画面洗成白雾
@@ -2310,6 +2376,46 @@ document.getElementById('speed').addEventListener('click', (e) => {
 });
 applySpeedVisual();
 
+/* --------------------------------------------------------- 背景夜曲 */
+/* 草原夜的氛围声：夜风 + 远处虫鸣 + 低频铺底，106 秒无缝循环。
+   浏览器禁止无手势自动播放，所以挂在「入 夜」这一下点击上，边进场边淡入。 */
+const bgmEl = document.getElementById('bgm');
+const bgmBtn = document.getElementById('btnBgm');
+const BGM_VOL = 0.34;
+let bgmFadeTimer = 0;
+let bgmWanted = (localStorage.getItem('xy_bgm') ?? '1') !== '0';
+
+function bgmFadeTo(target, ms = 2600) {
+  if (!bgmEl) return;
+  clearInterval(bgmFadeTimer);
+  const from = bgmEl.volume, t0 = performance.now();
+  bgmFadeTimer = setInterval(() => {
+    const k = Math.min(1, (performance.now() - t0) / ms);
+    const e = k * k * (3 - 2 * k);
+    bgmEl.volume = Math.max(0, Math.min(1, from + (target - from) * e));
+    if (k >= 1) { clearInterval(bgmFadeTimer); bgmEl.volume = target; }
+  }, 50);
+}
+
+function bgmStart() {
+  if (!bgmEl || !bgmWanted) return;
+  if (!bgmEl.paused && bgmEl.volume > 0.01) return;
+  bgmEl.volume = 0;
+  const pr = bgmEl.play();
+  if (pr && pr.catch) pr.catch(() => {});       // 没有手势就不硬来
+  bgmFadeTo(BGM_VOL, 3200);
+}
+
+function bgmSet(on, remember = true) {
+  bgmWanted = on;
+  bgmBtn.classList.toggle('on', on);
+  if (remember) localStorage.setItem('xy_bgm', on ? '1' : '0');
+  if (on) bgmStart();
+  else { bgmFadeTo(0, 900); setTimeout(() => { if (!bgmWanted) bgmEl.pause(); }, 950); }
+}
+bgmBtn.classList.toggle('on', bgmWanted);
+bgmBtn.addEventListener('click', () => bgmSet(!bgmWanted));
+
 /* --------------------------------------------------------- 视角还原 */
 /* "最初的位置" = 入场落地那一刻的取景：正北、略微抬头，地平线和草原留在画面下方 */
 const VIEW_HOME = { yaw: 0, pitch: 0.28 };
@@ -2719,7 +2825,10 @@ function enterNight() {
     cineStart();
   }
 }
-document.getElementById('enter').addEventListener('click', enterNight);
+document.getElementById('enter').addEventListener('click', () => {
+  bgmStart();                       // 夜曲随入场一起淡入（挂在手势上，才不会被打回）
+  enterNight();
+});
 document.getElementById('boot').addEventListener('click', enterNight);
 
 /* --------------------------------------------------------------- 启动 */
