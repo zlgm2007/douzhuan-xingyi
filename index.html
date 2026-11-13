@@ -23,7 +23,7 @@
   #app canvas{display:block;pointer-events:none}
 
   /* ---------------- 开场 ---------------- */
-  #boot{position:fixed;inset:0;z-index:30;display:grid;place-content:center;gap:26px;text-align:center;
+  #boot{position:fixed;inset:0;z-index:30;display:grid;place-content:center;gap:18px;text-align:center;
     background:radial-gradient(120% 80% at 50% 30%,#05080f 0%,#02040a 62%,#000 100%);
     cursor:pointer;transition:opacity 1.1s var(--ease),visibility 1.1s}
   #boot.hide{opacity:0;visibility:hidden}
@@ -31,12 +31,61 @@
   #boot .sub{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.32em;
     color:var(--faint);text-transform:uppercase}
   #boot .note{margin-top:6px;font-size:13px;color:var(--dim);letter-spacing:.18em}
-  #enter{margin-top:4px;padding:13px 38px;border:1px solid var(--line);border-radius:999px;background:transparent;
+  #enter{margin-top:6px;padding:13px 38px;border:1px solid var(--line);border-radius:999px;background:transparent;
     color:var(--paper);font-family:inherit;font-size:15px;letter-spacing:.4em;cursor:pointer;
-    transition:background .5s var(--ease),border-color .5s,transform .5s var(--ease)}
-  #enter:hover{background:rgba(235,231,223,.07);border-color:rgba(235,231,223,.42);transform:translateY(-1px)}
+    opacity:0;visibility:hidden;transform:translateY(10px) scale(.97);pointer-events:none;
+    transition:opacity .7s var(--ease),visibility .7s,transform .9s var(--ease),
+      background .5s var(--ease),border-color .5s}
+  #boot.ready #enter{opacity:1;visibility:visible;transform:none;pointer-events:auto}
+  #boot.ready #enter:hover{background:rgba(235,231,223,.07);border-color:rgba(235,231,223,.42);transform:translateY(-1px)}
+
+  /* 启动进度：一条会流动的星河 */
+  #boot .bar{position:relative;width:min(440px,72vw);height:7px;margin:2px auto 0;border-radius:99px;
+    box-shadow:0 0 22px rgba(80,120,255,.12)}
+  #boot .bar .track{position:absolute;inset:0;border-radius:99px;overflow:hidden;
+    background:linear-gradient(180deg,rgba(10,16,30,.92),rgba(5,9,18,.92));
+    box-shadow:inset 0 0 0 1px rgba(235,231,223,.13),inset 0 1px 3px rgba(0,0,0,.65)}
+  #boot .bar .track>div{position:absolute;top:0;bottom:0;border-radius:99px}
+  /* 轨道本身也铺一层极淡星尘：未填充的一段不是死灰，是还没流到的地方 */
+  #boot .bar .stars{inset:0;opacity:.28;
+    background-image:radial-gradient(circle,rgba(200,220,255,.95) .6px,rgba(200,220,255,0) 1.1px);
+    background-size:13px 5px;animation:bootRiver 9s linear infinite}
+  #boot .bar .fill{left:0;width:0;
+    background:linear-gradient(90deg,rgba(120,160,255,0) 0%,#8ab0ff 16%,#f2f8ff 50%,#a99bff 82%,rgba(169,155,255,0) 100%);
+    background-size:220% 100%;animation:bootRiver 2.8s linear infinite;
+    box-shadow:0 0 16px rgba(130,170,255,.80),0 0 36px rgba(130,130,255,.45);transition:width .18s linear}
+  #boot .bar .fill .dust{position:absolute;inset:0;opacity:.85;
+    background-image:radial-gradient(circle,rgba(255,255,255,.9) .7px,rgba(255,255,255,0) 1px);
+    background-size:11px 6px;animation:bootRiver 6s linear infinite}
+  #boot .bar .head{position:absolute;top:0;bottom:0;width:3px;left:0;transform:translateX(-50%);background:#fff;
+    box-shadow:0 0 8px #fff,0 0 18px rgba(150,180,255,.9),0 0 34px rgba(120,140,255,.55);
+    animation:bootPulse 1.4s ease-in-out infinite;transition:left .18s linear}
+  #boot .bar .sheen{width:38%;left:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);
+    animation:bootSheen 3.6s ease-in-out infinite}
+  @keyframes bootRiver{from{background-position:0% 0}to{background-position:-220% 0}}
+  @keyframes bootSheen{0%{transform:translateX(-60%)}55%,100%{transform:translateX(280%)}}
+  @keyframes bootPulse{0%,100%{opacity:.72}50%{opacity:1}}
+  #boot.done .bar .fill{background:linear-gradient(90deg,#ffcf8f,#fff4e2 58%,#ffc98a);animation:none;
+    box-shadow:0 0 14px rgba(255,200,140,.72),0 0 32px rgba(255,170,90,.38)}
+  #boot.done .bar .head{box-shadow:0 0 10px #fff,0 0 22px rgba(255,210,160,.9)}
+  #bootBar.bump .track{animation:bootBump .5s ease}
+  @keyframes bootBump{0%,100%{transform:scaleY(1)}28%{transform:scaleY(2.2)}46%{transform:scaleY(1)}68%{transform:scaleY(1.7)}}
+
+  /* 三个步骤：加载资源 / GPS 定位 / 校准时间 */
+  #boot .steps{display:flex;gap:15px;justify-content:center;flex-wrap:wrap;
+    font-family:"JetBrains Mono",ui-monospace,monospace;font-size:9.5px;letter-spacing:.16em;color:var(--faint)}
+  #boot .steps .step{display:flex;align-items:center;gap:7px;transition:color .6s var(--ease)}
+  #boot .steps .step i{width:6px;height:6px;border-radius:50%;flex:0 0 auto;
+    box-shadow:inset 0 0 0 1px rgba(235,231,223,.34);transition:background .5s,box-shadow .5s}
+  #boot .steps .step.busy{color:var(--dim)}
+  #boot .steps .step.busy i{background:rgba(150,180,255,.9);
+    box-shadow:0 0 8px rgba(120,160,255,.85),inset 0 0 0 1px rgba(255,255,255,.25);
+    animation:bootPulse 1.3s ease-in-out infinite}
+  #boot .steps .step.done{color:#cfe0ff}
+  #boot .steps .step.done i{background:#9fd2b4;box-shadow:0 0 7px rgba(120,220,160,.6),inset 0 0 0 0 transparent}
   #boot .tip{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.2em;color:var(--faint);
-    opacity:.7}
+    opacity:0;transition:opacity .7s var(--ease) .25s}
+  #boot.ready .tip{opacity:.7}
   /* 入场前的自动定位 / 校时回显 */
   #boot .probe{display:flex;flex-direction:column;gap:7px;justify-content:center;align-items:center;
     font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.14em;color:var(--dim);
@@ -147,6 +196,67 @@
     padding:7px 18px;border:1px solid rgba(235,231,223,.20);border-radius:999px;color:var(--dim);
     cursor:pointer;transition:.25s}
   #tourEnd .btns span:hover{color:var(--paper);border-color:rgba(235,231,223,.44);background:rgba(235,231,223,.06)}
+
+  /* 演示前的旁白加载器：黑色圆盘 + 绿色环形进度 */
+  #loadGate{position:fixed;inset:0;z-index:27;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:15px;background:rgba(2,4,10,.74);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
+    opacity:0;pointer-events:none;transition:opacity .35s var(--ease)}
+  #loadGate.on{opacity:1;pointer-events:auto}
+  #loadGate .ring{position:relative;width:136px;height:136px;border-radius:50%;padding:7px;
+    background:conic-gradient(from -0.4deg,#2b8f5a 0deg,#6ceb9c calc(var(--p,0) * 3.6deg),rgba(235,231,223,.10) 0);
+    box-shadow:0 0 34px rgba(60,200,120,.18);transition:background .12s linear}
+  /* 环头一颗亮点，随进度绕圈：让"还在走"这件事看得见，也把 conic 的硬切边藏掉 */
+  #loadGate .ring .tip{position:absolute;left:50%;top:50%;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;
+    border-radius:50%;background:#b9ffd2;
+    box-shadow:0 0 12px rgba(110,255,170,.95),0 0 3px #f0fff6;
+    transform:rotate(calc(var(--p,0) * 3.6deg)) translateY(-64.5px);transition:opacity .3s}
+  #loadGate .ring.done .tip{opacity:0}
+  #loadGate .ring .hole{position:absolute;inset:7px;border-radius:50%;background:#03060d;
+    box-shadow:inset 0 0 26px rgba(0,0,0,.92),inset 0 0 0 1px rgba(235,231,223,.06);
+    display:flex;align-items:center;justify-content:center}
+  #loadGate .pct{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:21px;letter-spacing:.06em;
+    color:#8decb4;text-shadow:0 0 16px rgba(90,230,140,.45)}
+  @keyframes lgSpin{to{transform:rotate(360deg)}}
+  #loadGate .ring:not(.done){animation:lgBreath 2s ease-in-out infinite}
+  @keyframes lgBreath{0%,100%{filter:brightness(.92)}50%{filter:brightness(1.18)}}
+  #loadGate .ring.done{background:#59e08a;box-shadow:0 0 30px rgba(90,230,140,.55)}
+  #loadGate .ring .tip{pointer-events:none}
+  #loadGate .lgTitle{font-size:12px;letter-spacing:.26em;color:rgba(235,231,223,.62)}
+  #loadGate .lgTitle em{font-style:normal;color:var(--paper)}
+  #loadGate .lgSub{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.18em;color:var(--faint)}
+  #loadGate .lgCancel{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.18em;
+    color:var(--dim);border:1px solid rgba(235,231,223,.16);border-radius:6px;padding:6px 14px;
+    cursor:pointer;transition:.25s;margin-top:1px}
+  #loadGate .lgCancel:hover{color:var(--paper);border-color:rgba(235,231,223,.38)}
+
+  /* 定中一颗星的爆闪：中心核 + 十字星芒 + 两层扩散环 + 几粒飞散星尘 */
+  #sparkles{position:fixed;inset:0;z-index:25;pointer-events:none;overflow:hidden}
+  #sparkles .flash{position:absolute;width:0;height:0}
+  #sparkles .flash .core{position:absolute;left:-9px;top:-9px;width:18px;height:18px;border-radius:50%;
+    background:radial-gradient(circle,#fff 0%,rgba(255,255,255,.92) 26%,rgba(178,220,255,.45) 52%,rgba(178,220,255,0) 74%);
+    animation:spCore .62s cubic-bezier(.1,.8,.2,1) forwards}
+  @keyframes spCore{0%{transform:scale(.1);opacity:0}18%{opacity:1}38%{transform:scale(1.55)}
+    100%{transform:scale(2.5);opacity:0}}
+  #sparkles .flash .ray{--a:0deg;position:absolute;left:50%;top:50%;width:214px;height:2.6px;margin:-1.3px 0 0 -107px;
+    background:linear-gradient(90deg,rgba(255,255,255,0),rgba(226,240,255,.9) 42%,#fff 50%,
+      rgba(226,240,255,.9) 58%,rgba(255,255,255,0));
+    transform-origin:50% 50%;animation:spRay .72s cubic-bezier(.1,.85,.2,1) forwards;filter:blur(.3px)}
+  #sparkles .flash .ray.short{width:124px;margin-left:-62px;opacity:.86}
+  @keyframes spRay{0%{opacity:0;transform:rotate(var(--a)) scaleX(.04)}
+    15%{opacity:1}100%{opacity:0;transform:rotate(var(--a)) scaleX(1.42)}}
+  #sparkles .flash .ring{position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;
+    border-radius:50%;border:1.5px solid rgba(200,232,255,.95);
+    box-shadow:0 0 8px rgba(150,205,255,.55),inset 0 0 6px rgba(150,205,255,.35);
+    animation:spRing .7s cubic-bezier(.16,.72,.24,1) forwards}
+  #sparkles .flash .ring.late{animation-delay:.15s;border-color:rgba(170,215,255,.66);border-width:1px}
+  @keyframes spRing{0%{transform:scale(.3);opacity:.95}100%{transform:scale(5.4);opacity:0}}
+  #sparkles .flash .dust{position:absolute;left:0;top:0}
+  #sparkles .flash .dust i{position:absolute;left:0;top:0;width:2.4px;height:2.4px;margin:-1.2px 0 0 -1.2px;
+    border-radius:50%;background:#eaf6ff;box-shadow:0 0 5px rgba(190,225,255,.85);
+    animation:spDust .74s cubic-bezier(.15,.7,.25,1) forwards}
+  @keyframes spDust{0%{opacity:0;transform:translate(0,0) scale(.4)}
+    20%{opacity:.9}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.85)}}
+  @media (prefers-reduced-motion:reduce){#sparkles .flash{display:none}}
 
   /* 太阳特写：另一台相机、另一个场景；HUD 让位给这颗星 */
   #sunFlash{position:fixed;inset:0;z-index:27;pointer-events:none;opacity:0;
@@ -386,6 +496,19 @@
   <h1>星野</h1>
   <div class="sub">Solar System · Seen From Earth</div>
   <div class="note">以地球为眼，看太阳与七颗行星此刻的位置</div>
+  <div class="bar" id="bootBar">
+    <div class="track">
+      <div class="stars"></div>
+      <div class="fill" id="barFill"><div class="dust"></div></div>
+      <div class="sheen"></div>
+    </div>
+    <div class="head" id="barHead"></div>
+  </div>
+  <div class="steps" id="bootSteps">
+    <span class="step" data-s="res"><i></i>加载资源</span>
+    <span class="step" data-s="geo"><i></i>GPS 定位</span>
+    <span class="step" data-s="time"><i></i>校准时间</span>
+  </div>
   <div class="probe">
     <span id="stGeo"><i id="stGeoDot"></i><b id="stGeoTxt">定位中…</b></span>
     <span id="stTime"><i id="stTimeDot"></i><b id="stTimeTxt">校时中…</b></span>
@@ -393,6 +516,15 @@
   <button id="enter">入 夜</button>
   <div class="tip">拖拽转天 · 滚轮推时 · Ctrl+滚轮缩放 · 点清单可对准某颗</div>
   <div class="err" id="bootErr"></div>
+</div>
+
+<div id="sparkles"></div>
+
+<div id="loadGate">
+  <div class="ring" id="lgRing"><span class="tip"></span><div class="hole"><span class="pct" id="lgPct">0%</span></div></div>
+  <div class="lgTitle" id="lgTitle">正在加载</div>
+  <div class="lgSub" id="lgSub"></div>
+  <div class="lgCancel" id="lgCancel">取消</div>
 </div>
 
 <audio id="bgm" src="assets/night-ambience.mp4" loop preload="auto"></audio>
@@ -2612,6 +2744,54 @@ function refreshEphem(force) {
 }
 refreshEphem(true);
 
+/* 定中一颗星的那一下：在命中处放一次星光爆闪。
+   DOM 实现（几层 <b> + 一次 CSS 动画），不进渲染管线，也不留任何状态。 */
+const sparkleLayer = document.getElementById('sparkles');
+function starFlash(x, y) {
+  if (!sparkleLayer || !isFinite(x) || !isFinite(y)) return;
+  const el = document.createElement('div');
+  el.className = 'flash';
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+  let dust = '';
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI * 2 * i) / 6 + Math.random() * 0.55;
+    const r = 13 + Math.random() * 15;
+    dust += `<i style="--dx:${(Math.cos(a) * r).toFixed(1)}px;--dy:${(Math.sin(a) * r).toFixed(1)}px"></i>`;
+  }
+  el.innerHTML = '<b class="core"></b>'
+    + '<b class="ray"></b><b class="ray" style="--a:90deg"></b>'
+    + '<b class="ray short" style="--a:45deg"></b><b class="ray short" style="--a:-45deg"></b>'
+    + '<b class="ring"></b><b class="ring late"></b>'
+    + `<span class="dust">${dust}</span>`;
+  sparkleLayer.appendChild(el);
+  setTimeout(() => el.remove(), 800);
+}
+
+/* 演示里的"定中"：镜头还在转的时候先排队，等转到目标那一帧再闪，
+   坐标用天体当时的投影位置，不是鼠标坐标。 */
+let pendingFlash = null;        // { kind: 'body' | 'famous', i }
+function queueFlash(kind, i) { pendingFlash = { kind, i }; }
+
+function screenOfWorld(v) {
+  const p = v.clone().project(camera);
+  if (p.z >= 1) return null;
+  const x = (p.x * 0.5 + 0.5) * window.innerWidth;
+  const y = (-p.y * 0.5 + 0.5) * window.innerHeight;
+  if (x < 24 || x > window.innerWidth - 24 || y < 24 || y > window.innerHeight - 24) return null;
+  return [x, y];
+}
+
+function flushPendingFlash() {
+  const q = pendingFlash;
+  if (!q) return;
+  pendingFlash = null;
+  const v = q.kind === 'body' ? bodyWorld[q.i] : fWorld[q.i];
+  if (!v || v.lengthSq() < 1e-6) return;
+  const s = screenOfWorld(v);
+  if (s) starFlash(s[0], s[1]);
+}
+
 /* ----------------------------------------------------------- 拖拽 / 滚轮 */
 const appEl = renderer.domElement;
 // 触摸设备（手机/平板）：用来决定要不要给"松手滑行"，鼠标端保持 1:1 直接停
@@ -2682,7 +2862,10 @@ function onUp(e) {
   if (!e) return;
   if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return;
   if (performance.now() - downT > 400) return;
-  let best = -1, bestD = 30;                       // 命中半径 30px
+  // 只有点在天幕（#app 的 canvas 层）上才算"定中一颗星"；点控件、卡片、菜单都不算
+  const onSky = e.target === appEl || (e.target && e.target.id === 'app');
+  if (!onSky) return;
+  let best = -1, bestD = 30, bestX = 0, bestY = 0;   // 命中半径 30px
   currentEphem.forEach((b, i) => {
     const w = bodyWorld[i];
     if (w.y / SKY_R < 0.0) return;                 // 地平线以下的点不到
@@ -2691,13 +2874,13 @@ function onUp(e) {
     const sx = (p.x * 0.5 + 0.5) * window.innerWidth;
     const sy = (-p.y * 0.5 + 0.5) * window.innerHeight;
     const d = Math.hypot(sx - e.clientX, sy - e.clientY);
-    if (d < bestD) { bestD = d; best = i; }
+    if (d < bestD) { bestD = d; best = i; bestX = sx; bestY = sy; }
   });
-  if (best >= 0) { selectBody(best, false); return; }
+  if (best >= 0) { starFlash(bestX, bestY); selectBody(best, false); return; }
   if (e.target && e.target.closest && e.target.closest('#card, #sunHud, #tourbar, #tourEnd')) return;
   // 尺度阶梯上的 8 个著名天体：给更大的命中半径（深空天体本身只是一个点）
   if (true) {
-    let bf = -1, bfd = 26;
+    let bf = -1, bfd = 26, bfx = 0, bfy = 0;
     for (let i = 0; i < FAMOUS.length; i++) {
       const w = fWorld[i];
       if (!w || w.y / SKY_R < 0.0) continue;
@@ -2706,13 +2889,13 @@ function onUp(e) {
       const fx = (p.x * 0.5 + 0.5) * window.innerWidth;
       const fy = (-p.y * 0.5 + 0.5) * window.innerHeight;
       const fd = Math.hypot(fx - e.clientX, fy - e.clientY);
-      if (fd < bfd) { bfd = fd; bf = i; }
+      if (fd < bfd) { bfd = fd; bf = i; bfx = fx; bfy = fy; }
     }
-    if (bf >= 0) { ding(1120); showFamousCard(bf, e.clientX, e.clientY); return; }
+    if (bf >= 0) { starFlash(bfx, bfy); ding(1120); showFamousCard(bf, e.clientX, e.clientY); return; }
   }
   // 行星没命中，再找星座亮星（半径 16px，取最近）
   if (state.showConst) {
-    let bc = -1, bd = 16;     // bc 现在存的是星点索引
+    let bc = -1, bd = 16, bcx = 0, bcy = 0;   // bc 现在存的是星点索引
     for (let k = 0; k < cStars.length; k++) {
       const w = cWorld[k];
       if (w.y / SKY_R < 0.0) continue;
@@ -2721,9 +2904,9 @@ function onUp(e) {
       const sx = (p.x * 0.5 + 0.5) * window.innerWidth;
       const sy = (-p.y * 0.5 + 0.5) * window.innerHeight;
       const d = Math.hypot(sx - e.clientX, sy - e.clientY);
-      if (d < bd) { bd = d; bc = k; }
+      if (d < bd) { bd = d; bc = k; bcx = sx; bcy = sy; }
     }
-    if (bc >= 0) { selectStar(bc, false); return; }   // 点到具体一颗星 → 弹它自己的卡片
+    if (bc >= 0) { starFlash(bcx, bcy); selectStar(bc, false); return; }   // 点到具体一颗星 → 弹它自己的卡片
   }
   hideCard();
 }
@@ -3187,7 +3370,7 @@ const SYSTOUR = [
       setTab('body');
       tourPlanet = bestPlanet(true);
       if (tourPlanet < 0) tourPlanet = bestPlanet(false);
-      if (tourPlanet >= 0) selectBody(tourPlanet, true); else hideCard();
+      if (tourPlanet >= 0) { selectBody(tourPlanet, true); queueFlash('body', tourPlanet); } else hideCard();
     } },
 
   { title: '④ 岁差与蛇夫座',
@@ -3208,6 +3391,7 @@ const LIGHTTOUR = FAMOUS.map((f, i) => ({
     showFamousCard(i);
     // 转到这颗星上：在地平线下就把钟拨到它升起的时候，然后再对准
     const r = focusFamous(i, { fly: true });
+    if (r.ok) queueFlash('famous', i);
     if (!r.ok) toast(`${f.cn} 在南天 · 南京纬度看不到，卡片里是它真实的距离`);
     else if (r.raised && window.innerWidth > 860) {
       const d = new Date(state.timeMs);
@@ -3222,6 +3406,103 @@ let TOUR = SYSTOUR;            // 当前正在跑的那条动线
 const narEl = new Audio();
 narEl.preload = 'auto';
 const narDur = new Map();       // 音频路径 → 时长（两条动线共用一张表）
+
+/* ---- 旁白预热 ----
+ * 演示一开场就要出声，所以选完动线先把整条动线的旁白（含收尾那声）真正下载完，
+ * 期间给一个黑色圆盘 + 绿色圆环的加载器；下完再起演，不再出现"画面跑了、声音没来"。 */
+const narrCache = new Map();    // 原始路径 → blob: URL
+const TOUR_TAIL = 'assets/tour/nar-5.mp4';      // 「演示结束」那一声，两条动线共用
+const lgEl = document.getElementById('loadGate');
+const lgRing = document.getElementById('lgRing');
+const lgPct = document.getElementById('lgPct');
+const lgTitleEl = document.getElementById('lgTitle');
+const lgSubEl = document.getElementById('lgSub');
+const LG = { on: false, cancelled: false, pending: false, ac: null };
+
+function lgSet(p, sub) {
+  const pct = Math.max(0, Math.min(100, Math.round(p * 100)));
+  if (lgRing) lgRing.style.setProperty('--p', pct);
+  if (lgPct) lgPct.textContent = pct + '%';
+  if (sub !== undefined && lgSubEl) lgSubEl.textContent = sub;
+}
+function lgShow(title) {
+  LG.on = true; LG.cancelled = false;
+  lgTitleEl.innerHTML = `<em>${title}</em> · 正在加载旁白`;
+  lgSet(0, '');
+  lgRing.classList.remove('done');
+  lgEl.classList.add('on');
+}
+function lgHide() {
+  LG.on = false;
+  lgEl.classList.remove('on');
+  LG.pending = false;
+}
+if (document.getElementById('lgCancel')) {
+  document.getElementById('lgCancel').addEventListener('click', () => {
+    LG.cancelled = true;
+    if (LG.ac) { try { LG.ac.abort(); } catch (e) {} }
+    lgHide();
+    document.getElementById('btnTour').classList.remove('on');
+    toast('已取消加载 · 演示不会开始');
+  });
+}
+
+function tourPrepMissing(plan) {
+  const list = (plan === 'light' ? LIGHTTOUR : SYSTOUR).map(st => st.audio).filter(Boolean);
+  return [...new Set(list.concat([TOUR_TAIL]))].filter(u => !narrCache.has(u));
+}
+async function fetchBytes(url, signal, onChunk) {
+  const res = await fetch(url, { cache: 'force-cache', signal });
+  if (!res.ok) throw new Error('http ' + res.status);
+  const total = Number(res.headers.get('content-length')) || 0;
+  if (!res.body || !total) {                       // 没长度信息就只能整包等
+    const blob = await res.blob();
+    onChunk(1);
+    return blob;
+  }
+  const reader = res.body.getReader();
+  const chunks = [];
+  let got = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    got += value.length;
+    onChunk(Math.min(0.95, got / total));
+  }
+  return new Blob(chunks, { type: res.headers.get('content-type') || 'audio/mpeg' });
+}
+async function preloadTour(plan, done) {
+  const label = plan === 'light' ? '光走了多久' : '系统演示';
+  const miss = tourPrepMissing(plan);
+  if (!miss.length) { done(); return; }            // 本场已下过，直接开演
+  LG.pending = true;
+  LG.ac = new AbortController();
+  lgShow(label);
+  const shownAt = performance.now();
+  const fracs = miss.map(() => 0);
+  let doneCount = 0;
+  const paint = () => lgSet(fracs.reduce((a, b) => a + b, 0) / miss.length, `${doneCount} / ${miss.length} 段旁白`);
+  paint();
+  await Promise.all(miss.map(async (url, i) => {
+    try {
+      const blob = await fetchBytes(url, LG.ac.signal, (f) => { fracs[i] = f; paint(); });
+      narrCache.set(url, URL.createObjectURL(blob));
+    } catch (e) {
+      // 单个文件失败也记一笔（空串 = 试过了但没成），播放时退回原始 URL，
+      // 免得每次点演示都为这个坏文件重新等一遍
+      if (!narrCache.has(url)) narrCache.set(url, '');
+    }
+    fracs[i] = 1; doneCount++; paint();
+  }));
+  if (LG.cancelled) { LG.cancelled = false; LG.pending = false; return; }
+  lgRing.classList.add('done');
+  lgSet(1, `${miss.length} / ${miss.length} 段旁白`);
+  const hold = Math.max(0, 560 - (performance.now() - shownAt));   // 别一闪而过，让人看清
+  await new Promise(r => setTimeout(r, hold + 280));
+  lgHide();
+  done();
+}
 function probeDur(path) {
   if (!path || narDur.has(path)) return;
   narDur.set(path, 0);
@@ -3234,7 +3515,7 @@ function narSpeak(i) {
   const st = TOUR[i];
   narEl.pause();
   if (!st || !st.audio) return;
-  narEl.src = st.audio;
+  narEl.src = narrCache.get(st.audio) || st.audio;    // 预热过的走本地 blob，起播即响
   narEl.currentTime = 0;
   const pr = narEl.play();
   if (pr && pr.catch) pr.catch(() => {});   // 没手势（?tour=1 自动起播）就静音跑，节奏不受影响
@@ -3265,6 +3546,15 @@ function tourRender() {
 
 function tourStart(plan) {
   if (!state.ready) return;
+  const key = plan === 'light' ? 'light' : 'sys';
+  if (tourPrepMissing(key).length) {           // 旁白还没就位：先加载，加载完再起演
+    if (LG.pending) return;                    // 已经在加载了，别叠第二遍
+    preloadTour(key, () => tourStartRaw(key));
+    return;
+  }
+  tourStartRaw(key);
+}
+function tourStartRaw(plan) {
   TOUR = plan === 'light' ? LIGHTTOUR : SYSTOUR;
   tour.on = true; tour.idx = -1; tour.paused = false;
   tour.prevFov = state.fov;
@@ -3283,7 +3573,7 @@ function tourEnd() {
   resetView();                       // 回到入场时的取景（正北 · 抬头 16°，草原在下）
   document.getElementById('tourEnd').classList.add('on');
   narEl.pause();
-  narEl.src = 'assets/tour/nar-5.mp4';
+  narEl.src = narrCache.get(TOUR_TAIL) || TOUR_TAIL;
   narEl.currentTime = 0;
   const pr = narEl.play();
   if (pr && pr.catch) pr.catch(() => {});
@@ -3399,6 +3689,66 @@ document.getElementById('btnNow').addEventListener('click', () => {
 /* ------------------------------------------ 入场前：自动定位 + 校时（遮罩回显） */
 const p2 = (n) => String(n).padStart(2, '0');
 
+/* 启动闸门：资源 / 定位 / 校时三条都落地，才放行「入夜」。
+ * 定位慢的时候进度条自己在动，按钮不出来，就不会出现"点了没反应"的错觉。 */
+const BOOT = { res: 0, geo: 0, time: 0, timePend: false, ready: false, shown: 0, t0: performance.now() };
+const bootEl = document.getElementById('boot');
+const barFill = document.getElementById('barFill');
+const barHead = document.getElementById('barHead');
+const bootStepEls = {};
+[...document.querySelectorAll('#bootSteps .step')].forEach(e => { bootStepEls[e.dataset.s] = e; });
+window.__boot = BOOT;                 // 调试用：__boot.ready 一看便知
+
+function bootPaint(k) {
+  const el = bootStepEls[k];
+  if (!el) return;
+  const v = BOOT[k];
+  el.classList.toggle('done', v >= 1);
+  el.classList.toggle('busy', v > 0 && v < 1);
+}
+function bootMaybeReady() {
+  if (BOOT.ready) return;
+  // 三步都落地、且星河真的流到尽头，才让按钮浮出来（条要看得见走完，不是一步到底）
+  if (BOOT.res >= 1 && BOOT.geo >= 1 && BOOT.time >= 1 && BOOT.shown >= 0.96) {
+    BOOT.ready = true;
+    bootEl.classList.add('ready', 'done');
+  }
+}
+function bootStep(k, v) {
+  if (k === 'time' && v >= 1 && BOOT.geo < 1) { BOOT.timePend = true; return; }  // 经度没定，恒星时不算数
+  BOOT[k] = Math.max(BOOT[k], Math.max(0, Math.min(1, v)));
+  bootPaint(k);
+  if (k === 'geo' && BOOT.geo >= 1 && BOOT.timePend && BOOT.time < 1) bootStep('time', 1);
+  bootMaybeReady();
+}
+let bootLast = performance.now();
+function bootFrame() {
+  const nowMs = performance.now();
+  const dt = Math.min(0.12, (nowMs - bootLast) / 1000);
+  bootLast = nowMs;
+  const target = (BOOT.res + BOOT.geo + BOOT.time) / 3;
+  // 时间常数 0.4s：与帧率无关，加载卡顿时条也按真实时间推进
+  BOOT.shown += (target - BOOT.shown) * (1 - Math.exp(-dt / 0.40));
+  if (target >= 1 && target - BOOT.shown < 0.001) BOOT.shown = 1;
+  const pct = Math.max(0, Math.min(100, BOOT.shown * 100));
+  if (barFill) barFill.style.width = pct + '%';
+  if (barHead) barHead.style.left = pct + '%';
+  bootMaybeReady();
+  // 没等到真实事件之前按时间缓推（有上限），进度条不会僵在那儿
+  const el = nowMs - BOOT.t0;
+  if (BOOT.res < 1) bootStep('res', Math.min(0.92, el / 900));
+  if (BOOT.geo < 1) bootStep('geo', Math.min(0.86, 0.18 + el / 5200));
+  if (BOOT.time < 1) bootStep('time', Math.min(0.80, 0.10 + el / 6000));
+  if (!BOOT.ready && el > 10000) {           // 兜底：定位卡死（比如权限弹窗一直没人应答）也不让人干等
+    BOOT.timePend = true;
+    bootStep('geo', 1);
+    bootStep('res', Math.max(BOOT.res, 1));
+    bootStep('time', 1);
+  }
+  requestAnimationFrame(bootFrame);
+}
+requestAnimationFrame(bootFrame);
+
 function setProbe(id, cls, txt) {
   const row = document.getElementById(id);
   const dot = document.getElementById(id + 'Dot');
@@ -3407,6 +3757,15 @@ function setProbe(id, cls, txt) {
   dot.className = cls === 'ok' ? 'ok' : cls === 'no' ? 'no' : '';
   t.textContent = txt;
   row.classList.add('in');
+  if (id === 'stGeo' && (cls === 'ok' || cls === 'no')) bootStep('geo', 1);
+  if (id === 'stTime' && cls === 'ok') bootStep('time', 1);
+}
+
+// ?cine=0 是截图与调试用的直落模式，别让进度条挡路
+if (new URLSearchParams(location.search).get('cine') === '0') {
+  bootStep('res', 1); bootStep('geo', 1); bootStep('time', 1);
+  BOOT.shown = 1;                    // 直落模式不等星河游完，立刻开门（截图脚本也不至于卡在遮罩上）
+  bootMaybeReady();
 }
 
 function probeTime() {
@@ -3422,8 +3781,9 @@ function probeTime() {
   const obsStr = drift > 90e3
     ? ` · 观测 ${p2(obs.getMonth() + 1)}-${p2(obs.getDate())} ${p2(obs.getHours())}:${p2(obs.getMinutes())}`
     : '';
+  const geoPend = (window.__boot && window.__boot.geo < 1) ? ' · 待定位确认' : '';
   setProbe('stTime', 'ok',
-    `校时 ${p2(now.getMonth() + 1)}-${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())} · ${offStr} · 恒星时 ${lstStr}${obsStr}`);
+    `校时 ${p2(now.getMonth() + 1)}-${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())} · ${offStr} · 恒星时 ${lstStr}${obsStr}${geoPend}`);
 }
 
 function probeGeo() {
@@ -3448,6 +3808,7 @@ function probeGeo() {
     (err) => {
       const why = err && err.code === 1 ? '未授权' : err && err.code === 3 ? '超时' : '定位失败';
       setProbe('stGeo', 'no', `${why} · 用默认 ${site}`);
+      probeTime();                       // 定位落定（哪怕是失败），校时文案也该去掉待定位后缀
     },
     { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
   );
@@ -3626,6 +3987,8 @@ function updateCompass(force) {
 updateCompass(true);
 
 function tick() {
+  // 第一帧渲染出来 = 着色器、纹理、几何都建好了，「加载资源」这一步才算真的过
+  if (BOOT.res < 1) bootStep('res', 1);
   const now = performance.now();
   const dt = Math.min(0.05, (now - t0) / 1000);
   t0 = now;
@@ -3665,6 +4028,7 @@ function tick() {
       state.pitch += (state.focus.pitch - state.pitch) * Math.min(1, dt * 4.2);
       if (Math.abs(state.focus.yaw - state.yaw) < 0.002 && Math.abs(state.focus.pitch - state.pitch) < 0.002) state.focus = null;
     }
+    if (!state.focus) flushPendingFlash();
     camera.rotation.y = state.yaw;
     camera.rotation.x = state.pitch;
   }
@@ -3934,6 +4298,7 @@ function landNow() {
 
 function enterNight() {
   if (booted) return;
+  if (!BOOT.ready) return;          // 资源/定位/校时没走完，不进
   booted = true;
   document.getElementById('boot').classList.add('hide');
   state.ready = true;
@@ -3953,7 +4318,15 @@ document.getElementById('enter').addEventListener('click', () => {
   bgmStart();                       // 夜曲随入场一起淡入（挂在手势上，才不会被打回）
   enterNight();
 });
-document.getElementById('boot').addEventListener('click', enterNight);
+document.getElementById('boot').addEventListener('click', () => {
+  if (BOOT.ready) { enterNight(); return; }
+  const bar = document.getElementById('bootBar');   // 还没就绪：让星河抖一下，说明还在准备
+  if (!bar) return;
+  bar.classList.remove('bump');
+  void bar.offsetWidth;
+  bar.classList.add('bump');
+  setTimeout(() => bar.classList.remove('bump'), 520);
+});
 
 /* --------------------------------------------------------------- 启动 */
 function resize() {
