@@ -197,6 +197,38 @@
     cursor:pointer;transition:.25s}
   #tourEnd .btns span:hover{color:var(--paper);border-color:rgba(235,231,223,.44);background:rgba(235,231,223,.06)}
 
+  /* 演示前的旁白加载器：黑色圆盘 + 绿色环形进度 */
+  #loadGate{position:fixed;inset:0;z-index:27;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:15px;background:rgba(2,4,10,.74);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
+    opacity:0;pointer-events:none;transition:opacity .35s var(--ease)}
+  #loadGate.on{opacity:1;pointer-events:auto}
+  #loadGate .ring{position:relative;width:136px;height:136px;border-radius:50%;padding:7px;
+    background:conic-gradient(from -0.4deg,#2b8f5a 0deg,#6ceb9c calc(var(--p,0) * 3.6deg),rgba(235,231,223,.10) 0);
+    box-shadow:0 0 34px rgba(60,200,120,.18);transition:background .12s linear}
+  /* 环头一颗亮点，随进度绕圈：让"还在走"这件事看得见，也把 conic 的硬切边藏掉 */
+  #loadGate .ring .tip{position:absolute;left:50%;top:50%;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;
+    border-radius:50%;background:#b9ffd2;
+    box-shadow:0 0 12px rgba(110,255,170,.95),0 0 3px #f0fff6;
+    transform:rotate(calc(var(--p,0) * 3.6deg)) translateY(-64.5px);transition:opacity .3s}
+  #loadGate .ring.done .tip{opacity:0}
+  #loadGate .ring .hole{position:absolute;inset:7px;border-radius:50%;background:#03060d;
+    box-shadow:inset 0 0 26px rgba(0,0,0,.92),inset 0 0 0 1px rgba(235,231,223,.06);
+    display:flex;align-items:center;justify-content:center}
+  #loadGate .pct{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:21px;letter-spacing:.06em;
+    color:#8decb4;text-shadow:0 0 16px rgba(90,230,140,.45)}
+  @keyframes lgSpin{to{transform:rotate(360deg)}}
+  #loadGate .ring:not(.done){animation:lgBreath 2s ease-in-out infinite}
+  @keyframes lgBreath{0%,100%{filter:brightness(.92)}50%{filter:brightness(1.18)}}
+  #loadGate .ring.done{background:#59e08a;box-shadow:0 0 30px rgba(90,230,140,.55)}
+  #loadGate .ring .tip{pointer-events:none}
+  #loadGate .lgTitle{font-size:12px;letter-spacing:.26em;color:rgba(235,231,223,.62)}
+  #loadGate .lgTitle em{font-style:normal;color:var(--paper)}
+  #loadGate .lgSub{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.18em;color:var(--faint)}
+  #loadGate .lgCancel{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.18em;
+    color:var(--dim);border:1px solid rgba(235,231,223,.16);border-radius:6px;padding:6px 14px;
+    cursor:pointer;transition:.25s;margin-top:1px}
+  #loadGate .lgCancel:hover{color:var(--paper);border-color:rgba(235,231,223,.38)}
+
   /* 太阳特写：另一台相机、另一个场景；HUD 让位给这颗星 */
   #sunFlash{position:fixed;inset:0;z-index:27;pointer-events:none;opacity:0;
     background:radial-gradient(circle at 50% 50%,#fff 0%,#ffd9a8 46%,#ff9436 100%)}
@@ -455,6 +487,13 @@
   <button id="enter">入 夜</button>
   <div class="tip">拖拽转天 · 滚轮推时 · Ctrl+滚轮缩放 · 点清单可对准某颗</div>
   <div class="err" id="bootErr"></div>
+</div>
+
+<div id="loadGate">
+  <div class="ring" id="lgRing"><span class="tip"></span><div class="hole"><span class="pct" id="lgPct">0%</span></div></div>
+  <div class="lgTitle" id="lgTitle">正在加载</div>
+  <div class="lgSub" id="lgSub"></div>
+  <div class="lgCancel" id="lgCancel">取消</div>
 </div>
 
 <audio id="bgm" src="assets/night-ambience.mp4" loop preload="auto"></audio>
@@ -3284,6 +3323,103 @@ let TOUR = SYSTOUR;            // 当前正在跑的那条动线
 const narEl = new Audio();
 narEl.preload = 'auto';
 const narDur = new Map();       // 音频路径 → 时长（两条动线共用一张表）
+
+/* ---- 旁白预热 ----
+ * 演示一开场就要出声，所以选完动线先把整条动线的旁白（含收尾那声）真正下载完，
+ * 期间给一个黑色圆盘 + 绿色圆环的加载器；下完再起演，不再出现"画面跑了、声音没来"。 */
+const narrCache = new Map();    // 原始路径 → blob: URL
+const TOUR_TAIL = 'assets/tour/nar-5.mp4';      // 「演示结束」那一声，两条动线共用
+const lgEl = document.getElementById('loadGate');
+const lgRing = document.getElementById('lgRing');
+const lgPct = document.getElementById('lgPct');
+const lgTitleEl = document.getElementById('lgTitle');
+const lgSubEl = document.getElementById('lgSub');
+const LG = { on: false, cancelled: false, pending: false, ac: null };
+
+function lgSet(p, sub) {
+  const pct = Math.max(0, Math.min(100, Math.round(p * 100)));
+  if (lgRing) lgRing.style.setProperty('--p', pct);
+  if (lgPct) lgPct.textContent = pct + '%';
+  if (sub !== undefined && lgSubEl) lgSubEl.textContent = sub;
+}
+function lgShow(title) {
+  LG.on = true; LG.cancelled = false;
+  lgTitleEl.innerHTML = `<em>${title}</em> · 正在加载旁白`;
+  lgSet(0, '');
+  lgRing.classList.remove('done');
+  lgEl.classList.add('on');
+}
+function lgHide() {
+  LG.on = false;
+  lgEl.classList.remove('on');
+  LG.pending = false;
+}
+if (document.getElementById('lgCancel')) {
+  document.getElementById('lgCancel').addEventListener('click', () => {
+    LG.cancelled = true;
+    if (LG.ac) { try { LG.ac.abort(); } catch (e) {} }
+    lgHide();
+    document.getElementById('btnTour').classList.remove('on');
+    toast('已取消加载 · 演示不会开始');
+  });
+}
+
+function tourPrepMissing(plan) {
+  const list = (plan === 'light' ? LIGHTTOUR : SYSTOUR).map(st => st.audio).filter(Boolean);
+  return [...new Set(list.concat([TOUR_TAIL]))].filter(u => !narrCache.has(u));
+}
+async function fetchBytes(url, signal, onChunk) {
+  const res = await fetch(url, { cache: 'force-cache', signal });
+  if (!res.ok) throw new Error('http ' + res.status);
+  const total = Number(res.headers.get('content-length')) || 0;
+  if (!res.body || !total) {                       // 没长度信息就只能整包等
+    const blob = await res.blob();
+    onChunk(1);
+    return blob;
+  }
+  const reader = res.body.getReader();
+  const chunks = [];
+  let got = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    got += value.length;
+    onChunk(Math.min(0.95, got / total));
+  }
+  return new Blob(chunks, { type: res.headers.get('content-type') || 'audio/mpeg' });
+}
+async function preloadTour(plan, done) {
+  const label = plan === 'light' ? '光走了多久' : '系统演示';
+  const miss = tourPrepMissing(plan);
+  if (!miss.length) { done(); return; }            // 本场已下过，直接开演
+  LG.pending = true;
+  LG.ac = new AbortController();
+  lgShow(label);
+  const shownAt = performance.now();
+  const fracs = miss.map(() => 0);
+  let doneCount = 0;
+  const paint = () => lgSet(fracs.reduce((a, b) => a + b, 0) / miss.length, `${doneCount} / ${miss.length} 段旁白`);
+  paint();
+  await Promise.all(miss.map(async (url, i) => {
+    try {
+      const blob = await fetchBytes(url, LG.ac.signal, (f) => { fracs[i] = f; paint(); });
+      narrCache.set(url, URL.createObjectURL(blob));
+    } catch (e) {
+      // 单个文件失败也记一笔（空串 = 试过了但没成），播放时退回原始 URL，
+      // 免得每次点演示都为这个坏文件重新等一遍
+      if (!narrCache.has(url)) narrCache.set(url, '');
+    }
+    fracs[i] = 1; doneCount++; paint();
+  }));
+  if (LG.cancelled) { LG.cancelled = false; LG.pending = false; return; }
+  lgRing.classList.add('done');
+  lgSet(1, `${miss.length} / ${miss.length} 段旁白`);
+  const hold = Math.max(0, 560 - (performance.now() - shownAt));   // 别一闪而过，让人看清
+  await new Promise(r => setTimeout(r, hold + 280));
+  lgHide();
+  done();
+}
 function probeDur(path) {
   if (!path || narDur.has(path)) return;
   narDur.set(path, 0);
@@ -3296,7 +3432,7 @@ function narSpeak(i) {
   const st = TOUR[i];
   narEl.pause();
   if (!st || !st.audio) return;
-  narEl.src = st.audio;
+  narEl.src = narrCache.get(st.audio) || st.audio;    // 预热过的走本地 blob，起播即响
   narEl.currentTime = 0;
   const pr = narEl.play();
   if (pr && pr.catch) pr.catch(() => {});   // 没手势（?tour=1 自动起播）就静音跑，节奏不受影响
@@ -3327,6 +3463,15 @@ function tourRender() {
 
 function tourStart(plan) {
   if (!state.ready) return;
+  const key = plan === 'light' ? 'light' : 'sys';
+  if (tourPrepMissing(key).length) {           // 旁白还没就位：先加载，加载完再起演
+    if (LG.pending) return;                    // 已经在加载了，别叠第二遍
+    preloadTour(key, () => tourStartRaw(key));
+    return;
+  }
+  tourStartRaw(key);
+}
+function tourStartRaw(plan) {
   TOUR = plan === 'light' ? LIGHTTOUR : SYSTOUR;
   tour.on = true; tour.idx = -1; tour.paused = false;
   tour.prevFov = state.fov;
@@ -3345,7 +3490,7 @@ function tourEnd() {
   resetView();                       // 回到入场时的取景（正北 · 抬头 16°，草原在下）
   document.getElementById('tourEnd').classList.add('on');
   narEl.pause();
-  narEl.src = 'assets/tour/nar-5.mp4';
+  narEl.src = narrCache.get(TOUR_TAIL) || TOUR_TAIL;
   narEl.currentTime = 0;
   const pr = narEl.play();
   if (pr && pr.catch) pr.catch(() => {});
