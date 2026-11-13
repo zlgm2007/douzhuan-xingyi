@@ -663,7 +663,9 @@
   <div class="mt"><span id="cardDia">—</span><span id="cardDist">—</span></div>
   <p id="cardDesc">—</p>
   <div class="note hide" id="cardNote"></div>
-  <div class="go" id="cardGo"><i>◎</i>查看细节</div></div>
+  <div class="go" id="cardGo"><i>◎</i>查看细节</div>
+  <div class="go off" id="cardMoon"><i>☾</i>登陆月球</div>
+  <div class="go off" id="cardHome"><i>←</i>返回地球</div></div>
 
 <script>
   // 普通 script 里装错误钩子：模块语法错误也能显示出来
@@ -835,6 +837,9 @@ const U = {
   uResolution: { value: new THREE.Vector2(1, 1) },
   uMilkyGain:  { value: 1.55 },
   uVoice:      { value: 0 },
+  uMoon:       { value: 0 },        // 0=地球大气 · 1=月面无大气
+  uSunAlt:     { value: 0 },        // 太阳高度（正弦），地面受光用
+  uSunW:       { value: new THREE.Vector3(0, 1, 0) },   // 太阳在世界坐标里的方向（地面/地球盘受光用）
 };
 
 /* --------------------------------------------------------- 公共 Sky 片段 */
@@ -961,7 +966,7 @@ const skyMat = new THREE.ShaderMaterial({
     precision highp float;
     varying vec3 vDir;
     uniform mat3 uSky, uSkyInv, uEqToGal;
-    uniform float uTime, uReveal, uLimitMag, uMilkyGain, uDay, uFov;
+    uniform float uTime, uReveal, uLimitMag, uMilkyGain, uDay, uFov, uMoon;
     float airmass(float y){
       float altDeg = degrees(asin(clamp(y, -1.0, 1.0)));
       return 1.0 / (max(y, 0.0) + 0.50572 * pow(max(altDeg + 6.07995, 0.05), -1.6364));
@@ -971,8 +976,12 @@ const skyMat = new THREE.ShaderMaterial({
     void main(){
       vec3 d = normalize(vDir);
       vec3 col = skyBase(d, uTime);
+      // 月面上没有大气：地平那层散射辉光整块拿掉，只留极淡的天底，
+      // 星点与银河反而更硬更亮（这也是阿波罗照片里最反直觉的一点）
+      float atm = 1.0 - uMoon;
+      col = mix(col, vec3(0.0010, 0.0018, 0.0042), uMoon * 0.78);
       vec3 e = uSkyInv * d;
-      float ext = exp(-0.22 * (airmass(d.y) - 1.0));
+      float ext = exp(-0.22 * atm * (airmass(d.y) - 1.0));
       // 推近时同一片天空铺满全屏，必须压一点亮度，否则整块发白
       float mwFov = mix(1.0, 0.52, smoothstep(40.0, 12.0, uFov));
       float detail = mix(0.30, 1.0, smoothstep(46.0, 12.0, uFov));
@@ -981,7 +990,7 @@ const skyMat = new THREE.ShaderMaterial({
              * smoothstep(-0.02, 0.06, d.y);
       // 日间：太阳在地平以上时，天空被天光整体提亮（视觉上不是"黑天挂太阳"）
       // 本页是"夜空观测"模式：白天只留一层很淡的天光，不把画面洗成白雾
-      col += vec3(0.011, 0.014, 0.021) * uDay * (0.25 + 0.75 * smoothstep(-0.12, 0.55, d.y));
+      col += vec3(0.011, 0.014, 0.021) * uDay * atm * (0.25 + 0.75 * smoothstep(-0.12, 0.55, d.y));
       col *= uReveal;
       col *= smoothstep(-0.08, 0.0, d.y) * 0.9 + 0.1;
       gl_FragColor = vec4(col, 1.0);
@@ -1009,7 +1018,7 @@ const starMat = new THREE.ShaderMaterial({
   vertexShader: /* glsl */`
     attribute vec3 aDir; attribute vec3 aColor; attribute float aMag; attribute float aSeed;
     uniform mat3 uSky;
-    uniform float uPixelRatio, uTime, uLimitMag, uExposure, uVoice, uDay, uFov;
+    uniform float uPixelRatio, uTime, uLimitMag, uExposure, uVoice, uDay, uFov, uMoon;
     varying vec3 vColor; varying float vAlpha;
     float airmass(float y){
       float altDeg = degrees(asin(clamp(y, -1.0, 1.0)));
@@ -1018,7 +1027,7 @@ const starMat = new THREE.ShaderMaterial({
     void main(){
       vec3 w = uSky * aDir;
       float X = airmass(w.y);
-      float m = aMag + 0.26 * (X - 1.0);
+      float m = aMag + 0.26 * (1.0 - uMoon) * (X - 1.0);
       float f = pow(10.0, -0.4 * (m - 1.0));
       float vis = smoothstep(uLimitMag + 0.8, uLimitMag - 0.3, m)
                 * smoothstep(0.0, 0.05, w.y) * smoothstep(-0.02, 0.02, w.y);
@@ -1120,7 +1129,8 @@ function makeRidge(radius, baseH, amp, seed, colorA, colorB, opacity) {
   return mesh;
 }
 // 极淡远山：只留地平线上一点起伏，压住草原的天际线（约 6% 对比度）
-scene.add(makeRidge(1500, 6, 22, 3, '#05070d', '#0a1018', 0.34));
+const ridgeMesh = makeRidge(1500, 6, 22, 3, '#05070d', '#0a1018', 0.34);
+scene.add(ridgeMesh);
 
 
 /* -------------------------------------------------------------- 草原地面 */
@@ -1129,6 +1139,99 @@ scene.add(makeRidge(1500, 6, 22, 3, '#05070d', '#0a1018', 0.34));
  * 一块平的、能一直铺到地平线的地面 —— 相机的"高度"于是有了真实含义
  * （y 从 150 落到 3 时，几何地平线自己会抬起来），不需要任何假动画。
  */
+/* ------------------------------------------------------------ 月壤贴图
+ * 真月面近景（阿波罗照片）不是"一格格圆坑"，而是：
+ *   细粉尘风化层 + 大小不一的碎石/角砾（多数嵌在土里） + 不规则的次级坑 + 麻点。
+ * 这些细节用 shader 现算太贵，一次性画进一张可平铺贴图，地面按世界坐标重复采样。
+ */
+const REGO_SIZE = 512;
+const regoTex = (() => {
+  const S = REGO_SIZE;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const cx = cv.getContext('2d');
+  const h1 = (x, y) => {
+    const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+    return n - Math.floor(n);
+  };
+  const at = (x, y) => h1(((x % S) + S) % S, ((y % S) + S) % S);
+  const vn = (x, y) => {
+    const ix = Math.floor(x), iy = Math.floor(y);
+    const fx = x - ix, fy = y - iy;
+    const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+    const a = at(ix, iy), b = at(ix + 1, iy), c = at(ix, iy + 1), d = at(ix + 1, iy + 1);
+    return (a + (b - a) * ux) * (1 - uy) + (c + (d - c) * ux) * uy;
+  };
+  const fbm = (x, y, oct, f0) => {
+    let v = 0, amp = 0.55, f = f0;
+    for (let i = 0; i < oct; i++) { v += amp * vn(x * f, y * f); amp *= 0.5; f *= 2.07; }
+    return v;
+  };
+  // 底：多尺度明暗 + 麻点（微陨石坑打在粉尘上）
+  const img = cx.createImageData(S, S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const v = fbm(x, y, 5, 0.021) * 0.74 + fbm(x, y, 3, 0.098) * 0.26;
+    let g = 146 + (v * 2 - 1) * 52;
+    const sp = h1(x * 1.71 + 91, y * 2.37 + 13);
+    if (sp > 0.90) g += 34; else if (sp < 0.10) g -= 30;
+    const i = (y * S + x) * 4;
+    img.data[i] = g; img.data[i + 1] = g - 1; img.data[i + 2] = g - 6; img.data[i + 3] = 255;
+  }
+  cx.putImageData(img, 0, 0);
+  // 平铺：一张图要能无缝重复，所有元素在 9 个位置各画一遍
+  const wrap = (fn) => { for (let dx = -S; dx <= S; dx += S) for (let dy = -S; dy <= S; dy += S) fn(dx, dy); };
+  // 不规则洼地：椭圆 + 旋转 + 三次错位同心环，边缘故意含糊，不做"规整圆孔"
+  for (let i = 0; i < 34; i++) {
+    const x = Math.random() * S, y = Math.random() * S;
+    const r = 7 + Math.random() * (10 + 40 * (1 - i / 26));
+    const sx = 1.0 + Math.random() * 0.5, sy = 0.42 + Math.random() * 0.55;
+    const rot = Math.random() * Math.PI;
+    wrap((dx, dy) => {
+      cx.save();
+      cx.translate(x + dx, y + dy); cx.rotate(rot); cx.scale(sx, sy);
+      for (let k = 2; k >= 0; k--) {
+        const off = (k - 1) * r * 0.12, rr = r * (1 + k * 0.06);
+        const g0 = cx.createRadialGradient(off, off * 0.6, 0, 0, 0, rr * 1.85);
+        g0.addColorStop(0.00, 'rgba(46,44,40,0.70)');   // 坑底：暗
+        g0.addColorStop(0.40, 'rgba(72,69,64,0.40)');
+        g0.addColorStop(0.66, 'rgba(196,190,180,0.26)'); // 坑缘：受光微亮
+        g0.addColorStop(0.80, 'rgba(160,155,146,0.09)');
+        g0.addColorStop(1.00, 'rgba(150,146,138,0)');
+        cx.fillStyle = g0; cx.beginPath(); cx.arc(0, 0, rr * 1.85, 0, Math.PI * 2); cx.fill();
+      }
+      cx.restore();
+    });
+  }
+  // 碎石：大小悬殊、朝同一方向带一点亮顶暗底的立体感
+  for (let i = 0; i < 460; i++) {
+    const x = Math.random() * S, y = Math.random() * S;
+    const w = 0.9 + Math.random() * Math.random() * 8.5;
+    const h = w * (0.45 + Math.random() * 0.6);
+    const rot = Math.random() * Math.PI;
+    const lum = 104 + Math.random() * 96;
+    wrap((dx, dy) => {
+      cx.save(); cx.translate(x + dx, y + dy); cx.rotate(rot);
+      cx.fillStyle = 'rgba(28,26,23,0.55)';
+      cx.beginPath(); cx.ellipse(w * 0.16, h * 0.22, w, h, 0, 0, Math.PI * 2); cx.fill();
+      cx.fillStyle = `rgba(${lum},${lum - 3},${lum - 10},0.92)`;
+      cx.beginPath(); cx.ellipse(0, 0, w, h, 0, 0, Math.PI * 2); cx.fill();
+      if (w > 3.4) {
+        cx.fillStyle = 'rgba(214,208,196,0.30)';
+        cx.beginPath(); cx.ellipse(-w * 0.20, -h * 0.25, w * 0.55, h * 0.40, 0, 0, Math.PI * 2); cx.fill();
+      }
+      cx.restore();
+    });
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.needsUpdate = true;
+  tex.minFilter = THREE.LinearFilter;      // 关 mip：掠射角选最高 mip 会把纹理糊成一片平均灰
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return tex;
+})();
+
 const GROUND_R = 2600;
 (() => {
   const g = new THREE.CircleGeometry(GROUND_R, 128, 0, Math.PI * 2);
@@ -1139,6 +1242,7 @@ const GROUND_R = 2600;
       ...U,
       uFogCol: { value: new THREE.Vector3(0.0272, 0.0352, 0.0452) },
       uGroundR: { value: GROUND_R },
+      uRego: { value: regoTex },
     },
     vertexShader: /* glsl */`
       varying vec3 vWorld;
@@ -1151,8 +1255,17 @@ const GROUND_R = 2600;
       precision highp float;
       varying vec3 vWorld;
       uniform float uTime, uReveal, uGroundR;
+      uniform float uMoon, uSunAlt;
       uniform vec3 uFogCol;
+      uniform sampler2D uRego;
+      uniform vec3 uSunW;
       ${GLSL_NOISE}
+      // 地面专用噪声：不依赖 sin(huge)，大坐标下也不会退化成常数
+      float gHash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+      float gNoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        float a = gHash(i), b = gHash(i + vec2(1.0, 0.0)), c = gHash(i + vec2(0.0, 1.0)), d = gHash(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y); }
+      float gFbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { v += a * gNoise(p); p *= 2.03; a *= 0.5; } return v; }
       void main(){
         vec2 p = vWorld.xz;
         float n1 = fbm(p * 0.0042);          // 大尺度地块明暗
@@ -1161,15 +1274,51 @@ const GROUND_R = 2600;
         float tuft = vnoise(p * 2.4) * vnoise(p * 7.1);     // 草簇：中近景的颗粒感
         vec3 dark  = vec3(0.0118, 0.0192, 0.0150);
         vec3 lit   = vec3(0.0245, 0.0368, 0.0288);
-        vec3 col = mix(dark, lit, clamp(n1 * 0.78 + n2 * 0.30 + tuft * 0.22, 0.0, 1.0));
-        col *= 0.78 + 0.22 * n3;
-        // 远处融进天际雾：避免出现"一堵绿墙"的硬边
+        vec3 earthCol = mix(dark, lit, clamp(n1 * 0.78 + n2 * 0.30 + tuft * 0.22, 0.0, 1.0));
+        earthCol *= 0.78 + 0.22 * n3;
+
+        /* ---- 月面：玄武岩平原 + 碎屑 + 零散陨石坑 ---- */
+        float m1 = gFbm(p * 0.0038);          // 月海 / 高地的大尺度明暗
+        // 月壤：细粉尘 + 成片的洼 + 成撮的石屑 —— 全用噪声造，不画规整圆孔
+        float dust  = gFbm(p * 0.085) * 0.52 + gFbm(p * 0.42) * 0.30 + gNoise(p * 2.2) * 0.18;
+        float ridge = 1.0 - abs(gFbm(p * 0.058 + 7.3) * 2.0 - 1.0);   // 起伏的垄与沟：边界含糊，像被陨击翻过
+        float pit   = smoothstep(0.44, 0.92, gFbm(p * 0.36 + 2.2));    // 成片的暗洼，形状不规则
+        float stone = smoothstep(0.70, 0.94, gFbm(p * 2.4 + 11.0));    // 成撮的碎石区
+        float ground = dust * 0.60 + ridge * 0.44;
+        vec3 rockA = vec3(0.058, 0.056, 0.052);
+        vec3 rockB = vec3(0.175, 0.168, 0.158);
+        // 纹理主导明暗：坑是暗的、坑缘与砾石是亮的、粉尘是灰的 —— 不再是均匀的水泥面
+        vec3 moonCol = mix(rockA, rockB, clamp(m1 * 0.52 + ground * 1.05 - 0.44, 0.0, 1.0));
+        moonCol *= 1.0 - pit * 0.42;                                  // 洼地压暗
+        moonCol += vec3(0.058, 0.056, 0.052) * stone * (0.45 + 0.55 * smoothstep(-0.12, 0.20, uSunAlt));
+        // 靠得很近补一层高频颗粒（近处粒粒可数，远处自然消失）
+        float nearK = 1.0 - smoothstep(4.0, 26.0, length(p));
+        moonCol *= 1.0 + nearK * 0.34 * (gNoise(p * 96.0) - 0.5);
+        // 温和假法线：程序噪声的坡度，朝光面亮一点、背面暗一点（只是起伏，不改整体亮度）
+        float nL0 = gNoise((p - vec2(0.8, 0.0)) * 0.95), nR0 = gNoise((p + vec2(0.8, 0.0)) * 0.95);
+        float nD0 = gNoise((p - vec2(0.0, 0.8)) * 0.95), nU0 = gNoise((p + vec2(0.0, 0.8)) * 0.95);
+        vec2 g0 = vec2(nR0 - nL0, nU0 - nD0);
+        vec2 lDir = normalize(vec2(uSunW.x, uSunW.z) + vec2(1e-4, 1.0));
+        moonCol *= 0.86 + 0.34 * clamp(0.5 + 2.2 * dot(g0, lDir), 0.0, 1.0);
+        // 石屑堆：噪声聚成一小撮一小撮的浅色碎屑（阿波罗照片里到处都是）
+        float clump = smoothstep(0.66, 0.94, gFbm(p * 5.4 + 21.0));
+        moonCol += vec3(0.028, 0.027, 0.025) * clump * (0.45 + 0.55 * smoothstep(-0.12, 0.20, uSunAlt));
+        float speck = step(0.955, hash21(floor(p * 26.0)));
+        moonCol += vec3(0.016, 0.016, 0.017) * speck * (0.35 + 0.65 * smoothstep(-0.12, 0.20, uSunAlt));
+        // 受光：月昼太阳一照，月壤几乎是灰白（阿波罗照片的观感）；夜里只剩地照的冷灰
+        float sunLit = mix(0.62, 1.0, smoothstep(-0.12, 0.20, uSunAlt));
+        moonCol *= sunLit;
+        moonCol += vec3(0.044, 0.050, 0.064) * (1.0 - sunLit);   // 地照：冷而弱，但足以照出轮廓
+        moonCol *= mix(2.4, 1.0, smoothstep(-0.10, 0.16, uSunAlt));   // 月夜提亮，让地貌在低照度下也看得清
+
+        vec3 col = mix(earthCol, moonCol, uMoon);
+        // 远处融进天际雾：避免出现"一堵绿墙"的硬边（月面无大气，雾整块关掉）
         float r = length(p) / uGroundR;
-        col = mix(col, uFogCol, smoothstep(0.07, 0.46, r));
+        col = mix(col, uFogCol, smoothstep(0.07, 0.46, r) * (1.0 - uMoon));
         // 掠射角上的一点星光反照（代替原来的水面镜面，强度只有 1/3）
         float down = -normalize(vWorld - cameraPosition).y;
         float graze = 1.0 - smoothstep(0.03, 0.34, down);
-        col += vec3(0.0130, 0.0170, 0.0245) * graze * 0.38;
+        col += vec3(0.0130, 0.0170, 0.0245) * graze * 0.38 * (1.0 - 0.72 * uMoon);
         // 圆盘边界：高空俯视时圆盘会露出一个"弧形山包"，用高度驱动的淡出抹掉；
         // 站在地面上（camH≈3）时几乎不淡出，地平线保持清晰
         float fadeStart = mix(0.998, 0.40, smoothstep(5.0, 130.0, cameraPosition.y));
@@ -1494,6 +1643,15 @@ const PLANET_VIEWS = {
     stats:[['直径','49,528 km · 地球的 3.9 倍'],['距日','45.15 亿 km'],['自转','16.1 小时'],
            ['温度','约 -200 ℃'],['风速','可达 2,100 km/h']],
     note:'太阳系最猛的风在这里。它是唯一一颗先用数学推算位置、再被望远镜找到的行星——1846 年，勒维耶算出它该在哪里，伽勒当晚就看到了。' },
+
+  /* 站在月球上才有的第 10 颗：地球。1.9° 的视直径是这一层最重要的"尺度锚点" */
+  earth: { map:'assets/planets/earth.jpg', tint:[1.0,1.0,1.0], atm:[0.34,0.60,1.0], atmK:0.85, obl:23.44, rot:23.93, rot0:0, dist:2.62,
+    kick:'EARTH · 1 AU · 45.4 亿年',
+    say:'地球直径 12742 公里，是月球的三点七倍。月球上看它，视直径约 1.9 度，差不多是满月的四倍大，亮度比满月亮四十多倍。潮汐锁定让它几乎固定在北方天空同一个位置，只有轻微的摆动。', audio:'assets/audio/earth.wav',
+    title:'地球', en:'EARTH',
+    stats:[['直径','12,742 km · 月球的 3.67 倍'],['距月（平均）','384,400 km · 光走 1.28 秒'],
+           ['自转','23 小时 56 分'],['公转','365.256 天'],['大气','78% 氮 · 21% 氧']],
+    note:'从月球看地球，它几乎不动——潮汐锁定让月球永远以同一面朝着地球，地球于是钉在月面天空的一个固定方位上，只做周期约一个月的小幅"天平动"摆动。' },
 };
 
 const SRC_TEX = '纹理 Solar System Scope · CC BY 4.0 ｜ 数据 NASA NSSDCA（2025-03）';
@@ -1651,6 +1809,8 @@ function fillViewHud(key) {
   $('shStats').innerHTML = c.stats.map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join('');
   $('shNote').textContent = c.note;
   $('shSrc').textContent = c.proc ? SRC_NASA : SRC_TEX;
+  const sy = document.getElementById('shSay');
+  if (sy) sy.style.display = c.audio ? '' : 'none';   // 没有这段音频就不摆按钮
 }
 
 /* 过渡：先让星光糊成径向流，闪一下白，再露出这颗星；返回时反过来 */
@@ -2001,7 +2161,7 @@ const planetMat = new THREE.ShaderMaterial({
   uniforms: U,
   vertexShader: /* glsl */`
     attribute vec3 aDir; attribute vec3 aColor; attribute float aSize; attribute float aBoost; attribute float aMag;
-    uniform mat3 uSky; uniform float uPixelRatio, uTime, uDay, uFov;
+    uniform mat3 uSky; uniform float uPixelRatio, uTime, uDay, uFov, uMoon;
     varying vec3 vColor; varying float vBoost; varying float vAlpha;
     float airmass(float y){
       float altDeg = degrees(asin(clamp(y, -1.0, 1.0)));
@@ -2013,8 +2173,8 @@ const planetMat = new THREE.ShaderMaterial({
       float alt = w.y;
       // 地平线：0~2.9° 软淡出 + 0 以下硬兜底（与斗转同一条判据）
       float vis = smoothstep(0.0, 0.05, alt) * smoothstep(-0.02, 0.02, alt);
-      // 大气消光：越贴近地平越暗越偏红
-      float ext = exp(-0.30 * (airmass(alt) - 1.0));
+      // 大气消光：越贴近地平越暗越偏红（月面没有大气，这一层整块关掉）
+      float ext = exp(-0.30 * (1.0 - uMoon) * (airmass(alt) - 1.0));
       // 星等 → 视觉权重：木星/金星最抢眼，天王星海王星压到最淡但仍可辨
       float magA = aMag < -10.0 ? 1.7 : clamp(0.80 - 0.085 * aMag, 0.32, 1.45);
       vAlpha = aBoost > 2.0 ? 1.0 : magA * clamp(0.62 + 0.38 * aBoost, 0.0, 1.0);
@@ -2093,6 +2253,276 @@ saturnRing.renderOrder = 3;
 saturnRing.frustumCulled = false;
 scene.add(saturnRing);
 
+
+/* ================================================ 月面：地球盘与登月舱 */
+/*
+ * 站在月球上看地球：视直径约 1.90°（满月的 3.7 倍直径），几乎固定在北方天空。
+ * 这里按真实角直径落在天球上（距离 SKY_R − 80，半径取 tan(0.95°)），
+ * 所以默认视场与缩到 12° 都对得上；相位由太阳方向实时算。
+ */
+const EARTH_DISC_R = (SKY_R - 80) * Math.tan(0.95 * DEG);
+const earthMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, depthTest: true,
+  uniforms: {
+    uMap: { value: null },
+    uSun: { value: new THREE.Vector3(1, 0, 0) },
+    uOpacity: { value: 0 },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+    void main(){
+      vUv = uv;
+      vN = normalize(mat3(modelMatrix) * normal);
+      vec4 wp = modelMatrix * vec4(position, 1.0);
+      vV = normalize(cameraPosition - wp.xyz);
+      gl_Position = projectionMatrix * viewMatrix * wp;
+    }`,
+  fragmentShader: /* glsl */`
+    precision highp float;
+    varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+    uniform sampler2D uMap; uniform vec3 uSun; uniform float uOpacity;
+    void main(){
+      vec3 n = normalize(vN);
+      float d = dot(n, uSun);
+      float lam = max(d, 0.0);
+      vec3 tex = texture2D(uMap, vUv).rgb;
+      // 昼夜线：在晨昏线上留一条窄过渡，夜面靠城市灯与地照，不硬切
+      float day = smoothstep(-0.10, 0.26, d);
+      vec3 col = tex * (0.03 + 2.05 * lam) * mix(0.50, 1.0, day);
+      // 临边那圈蓝：大气在月面上看是地球边缘最显眼的一笔
+      float rim = pow(1.0 - abs(dot(n, normalize(vV))), 2.4);
+      col += vec3(0.16, 0.36, 0.74) * rim * (0.30 + 0.70 * lam);
+      gl_FragColor = vec4(col, uOpacity);
+      #include <colorspace_fragment>
+    }`,
+});
+const earthDisc = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 40), earthMat);
+earthDisc.scale.setScalar(EARTH_DISC_R);
+earthDisc.renderOrder = 1;
+earthDisc.frustumCulled = false;
+earthDisc.visible = false;
+scene.add(earthDisc);
+new THREE.TextureLoader().load('assets/planets/earth.jpg', (t) => {
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  earthMat.uniforms.uMap.value = t;
+});
+
+/* ---- 登月舱 + 旗 + 散落的月岩：程序化低多边形，靠真光照出体积 ---- */
+const moonLight = new THREE.DirectionalLight(0xfff4e2, 2.6);
+const earthFill = new THREE.DirectionalLight(0x9fc0ff, 2.05);
+const moonAmb = new THREE.AmbientLight(0x232d3c, 1.05);
+scene.add(moonLight, earthFill, moonAmb);
+
+/* 远处几座低矮月丘：让地平线有起伏，又还是"平原"的调子 */
+// 用 Basic（不吃月光/地照那套蓝光）：颜色直接对齐月壤的夜面灰，纯靠亮度差做剪影
+const duneMat = new THREE.MeshBasicMaterial({ color: 0x35383d, fog: false });
+const dunes = new THREE.Group();
+// 距离 45~120m、高 3~8m 的一带低矮丘陵：月面无大气，它们就是地平线上那道剪影
+for (const [dx, dz, rr, hh, sx] of [[-60, -90, 38, 7.5, 2.8], [26, -118, 50, 9.0, 1.9], [86, -70, 34, 6.0, 2.3],
+                                   [-96, -56, 30, 5.5, 2.5], [-16, -146, 66, 11.0, 1.7], [116, -40, 28, 5.0, 3.1],
+                                   [52, -48, 24, 4.0, 2.9], [-44, -44, 22, 3.6, 3.5], [170, -150, 70, 13.0, 1.6],
+                                   [-180, -180, 80, 14.0, 1.5]]) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(rr, 18, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), duneMat);
+  m.scale.set(sx, hh / rr, 1.0);            // 逐個不同地横向拉长：一长条一长条的缓坡，不是圆包
+  m.position.set(dx, -0.24 * hh, dz);
+  m.rotation.y = dx * 0.5 + rr * 0.13;
+  dunes.add(m);
+}
+dunes.visible = false;
+scene.add(dunes);
+
+/* ------------------------------------------------------------ 月面坑洼与砾石
+ * shader 噪声在掠射角下会糊成一片，撑不起"地不平"的观感；
+ * 真正给真实感的是实体几何：不规则暗底坑 + 断续亮坑沿 + 满地砾石。
+ */
+/* ------------------------------------------------------------ 近景月壤（贴图）
+ * 自定义 shader 里 texture2D 采不出花纹（多次验证无效），
+ * 这里改用 three 自带的 MeshStandard + map/emissiveMap：贴图一定显示。
+ * 顶点再按噪声压出起伏，掠射光下自然有明暗。
+ */
+const nearGround = (() => {
+  const SIZE = 360, SEG = 260;
+  const g = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
+  g.rotateX(-Math.PI / 2);
+  const hash = (x, y) => { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); };
+  const vn = (x, y) => {
+    const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j;
+    const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+    const a = hash(i, j), b = hash(i + 1, j), c = hash(i, j + 1), d = hash(i + 1, j + 1);
+    return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+  };
+  const pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    const r = Math.hypot(x, z);
+    const h = vn(x * 0.5, z * 0.5) * 0.55 + vn(x * 1.7, z * 1.7) * 0.30 + vn(x * 5.2, z * 5.2) * 0.15;
+    const damp = 1.0 - THREE.MathUtils.smoothstep(r, 150, 175);
+    pos.setY(i, (h - 0.5) * 0.20 * damp);
+  }
+  g.computeVertexNormals();
+  const tex = regoTex.clone();
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(43, 43);          // 360m 铺 43 张 → 一张 8.3m
+  tex.needsUpdate = true;
+  const mat = new THREE.MeshStandardMaterial({
+    map: tex, color: 0x6e6e6d, roughness: 1.0, metalness: 0.0,
+    emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.14,
+  });
+  const m = new THREE.Mesh(g, mat);
+  m.position.y = 0.09;   // 压在高程圆盘之上，免得两片地面 z-fighting 出现三角斑
+  m.visible = false;
+  scene.add(m);
+  return m;
+})();
+
+const craters = (() => {
+  const g = new THREE.Group();
+  let sd = 20261113;
+  const rnd = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
+  const discMat = new THREE.MeshBasicMaterial({ color: 0x2b2d31, fog: false, transparent: true, opacity: 0.34, depthWrite: false });
+  const rimMat = new THREE.MeshBasicMaterial({ color: 0x6b6860, fog: false });
+  const discGeo = new THREE.CircleGeometry(1, 30);
+  const rimGeo = new THREE.TorusGeometry(1, 0.055, 5, 32);
+  for (let i = 0; i < 26; i++) {
+    const ang = rnd() * Math.PI * 2;
+    const dist = 4 + Math.pow(rnd(), 1.5) * 90;
+    const rr = 0.5 + Math.pow(rnd(), 1.7) * 2.4;
+    const sx = 1.0 + rnd() * 0.7, sz = 0.8 + rnd() * 0.55;
+    const yaw = rnd() * Math.PI;
+    const d = new THREE.Mesh(discGeo, discMat);
+    d.rotation.set(-Math.PI / 2, 0, yaw);
+    d.scale.set(rr * sx, rr * sz, 1);
+    d.position.set(Math.cos(ang) * dist, 0.02, Math.sin(ang) * dist);
+    d.renderOrder = 1;
+    g.add(d);
+    if (rnd() > 0.72) {
+      const r = new THREE.Mesh(rimGeo, rimMat);
+      r.rotation.set(-Math.PI / 2, 0, yaw);
+      r.scale.set(rr * sx, rr * sz, 1);
+      r.position.set(d.position.x, 0.035, d.position.z);
+      r.renderOrder = 2;
+      g.add(r);
+    }
+  }
+  g.visible = false;
+  scene.add(g);
+  return g;
+})();
+
+const gravel = (() => {
+  const COUNT = 700;
+  const geo = new THREE.IcosahedronGeometry(1, 0);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x4c4a46, fog: false });
+  const im = new THREE.InstancedMesh(geo, mat, COUNT);
+  const dummy = new THREE.Object3D();
+  const col = new THREE.Color();
+  let sd = 77123;
+  const rnd = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
+  for (let i = 0; i < COUNT; i++) {
+    const ang = rnd() * Math.PI * 2;
+    const dist = 1.2 + Math.pow(rnd(), 1.6) * 30;
+    const sz = 0.030 + rnd() * rnd() * 0.10;
+    dummy.position.set(Math.cos(ang) * dist, sz * 0.5, Math.sin(ang) * dist);
+    dummy.rotation.set(rnd() * 3.14, rnd() * 3.14, rnd() * 3.14);
+    dummy.scale.set(sz, sz * (0.5 + rnd() * 0.5), sz * (0.8 + rnd() * 0.4));
+    dummy.updateMatrix();
+    im.setMatrixAt(i, dummy.matrix);
+    const t = 0.20 + rnd() * 0.30;
+    col.setRGB(t, t * 0.97, t * 0.92);
+  }
+  im.instanceMatrix.needsUpdate = true;
+  if (im.instanceColor) im.instanceColor.needsUpdate = true;
+  im.frustumCulled = false;
+  im.visible = false;
+  scene.add(im);
+  return im;
+})();
+
+const moonGear = (() => {
+  const g = new THREE.Group();
+  const foil  = new THREE.MeshStandardMaterial({ color: 0x9e8a55, metalness: 0.14, roughness: 0.68, emissive: 0x453b22 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x9b968b, metalness: 0.08, roughness: 0.86, emissive: 0x3a3936 });
+  const dark  = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.30, roughness: 0.85 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xd2cdc0, metalness: 0.02, roughness: 0.95, emissive: 0x4a4741 });
+
+  // 下降级（八棱柱）+ 上升级（方块）+ 顶盖
+  const descent = new THREE.Mesh(new THREE.CylinderGeometry(1.12, 1.05, 1.2, 8), foil);
+  descent.position.y = 1.32; g.add(descent);
+  const ascent = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.96, 1.02), metal);
+  ascent.position.y = 2.42; g.add(ascent);
+  const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.62, 0.26, 8), metal);
+  hat.position.y = 3.03; g.add(hat);
+  // 舷窗
+  const win = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.26, 0.02), dark);
+  win.position.set(0, 2.46, 0.52); g.add(win);
+  // 主发动机喷管
+  const nozzle = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.62, 12, 1, true), dark);
+  nozzle.position.y = 0.55; nozzle.rotation.x = Math.PI; g.add(nozzle);
+  // 四条腿：斜撑 + 圆盘脚
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + i * Math.PI / 2;
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 1.95, 6), metal);
+    leg.position.set(Math.cos(a) * 0.86, 0.92, Math.sin(a) * 0.86);
+    leg.rotation.z = Math.cos(a) * 0.30; leg.rotation.x = -Math.sin(a) * 0.30;
+    g.add(leg);
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.34, 0.07, 12), metal);
+    pad.position.set(Math.cos(a) * 1.34, 0.05, Math.sin(a) * 1.34);
+    g.add(pad);
+  }
+  // 梯子
+  const ladder = new THREE.Mesh(new THREE.BoxGeometry(0.10, 1.15, 0.34), metal);
+  ladder.position.set(0, 1.05, 1.02); g.add(ladder);
+  // 天线：细杆 + 小碟
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.95, 6), white);
+  mast.position.set(0.42, 3.35, -0.30); mast.rotation.z = -0.22; g.add(mast);
+  const dish = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), white);
+  dish.position.set(0.62, 3.78, -0.44); dish.rotation.set(Math.PI * 0.62, 0, 0.35); g.add(dish);
+  // 国旗：杆 + 面（微微起拱，别做成一整块硬板）
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 2.4, 6), white);
+  pole.position.set(-2.35, 1.2, 0.55); g.add(pole);
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.25, 0.72, 12, 6), new THREE.MeshStandardMaterial({
+    color: 0xd8dde6, metalness: 0.0, roughness: 1.0, side: THREE.DoubleSide, emissive: 0x3d434d,
+  }));
+  flag.position.set(-1.72, 2.06, 0.55); g.add(flag);
+  const fp = flag.geometry.attributes.position;
+  for (let i = 0; i < fp.count; i++) {         // 横向掠一道风：月面无风，只做"展开"的形状
+    const x = fp.getX(i);
+    fp.setZ(i, Math.sin((x / 1.25 + 0.5) * Math.PI * 1.4) * 0.06);
+  }
+  fp.needsUpdate = true;
+  flag.geometry.computeVertexNormals();
+
+  // 散落月岩
+  let seed = 20260101;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const rockMat  = new THREE.MeshStandardMaterial({ color: 0x6f6c66, metalness: 0.0, roughness: 0.95, flatShading: true, emissive: 0x24221e });
+  const rockMat2 = new THREE.MeshStandardMaterial({ color: 0x7a766f, metalness: 0.0, roughness: 0.92, flatShading: true, emissive: 0x2b2925 });
+  // 真月面的近景是"细粉 + 满地碎石"：大小相差两个数量级，而且爱扎堆
+  const clumps = [[-3.2, -7.5], [2.6, -5.6], [-8.4, -13.0], [5.8, -12.2], [0.5, -18.0]];
+  for (let i = 0; i < 210; i++) {
+    const inClump = i % 4 < 3;
+    const c = clumps[i % clumps.length];
+    const a = rnd() * Math.PI * 2;
+    const rr = inClump ? 0.5 + rnd() * 3.2 : 1.2 + rnd() * 17.5;
+    const s = 0.035 + rnd() * rnd() * (i < 16 ? 0.55 : 0.22);
+    const geo = i % 3 === 0 ? new THREE.DodecahedronGeometry(s, 0) : new THREE.IcosahedronGeometry(s, 0);
+    const rock = new THREE.Mesh(geo, i % 6 === 0 ? rockMat2 : rockMat);
+    const ox = inClump ? c[0] : 0, oz = inClump ? c[1] : 0;
+    rock.position.set(ox + Math.cos(a) * rr, s * (0.26 + rnd() * 0.26), oz + Math.sin(a) * rr);
+    rock.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3);
+    rock.scale.set(1.0, 0.52 + rnd() * 0.55, 1.0);      // 压扁：像"半嵌在土里"的角砾
+    g.add(rock);
+  }
+  g.position.set(-6.7, 0, -15.5);
+  g.scale.setScalar(1.12);
+  g.rotation.y = 0.58;
+  g.scale.setScalar(1.0);
+  g.visible = false;
+  return g;
+})();
+scene.add(moonGear);
+
 /* ---- 黄道线：解释"行星为什么都排成一条" ---- */
 const ECL_N = 180;
 const eclGeo = new THREE.BufferGeometry();
@@ -2147,18 +2577,49 @@ state.fovTarget = state.fov;
 
 let LONGITUDE = 113.0;    // 观测经度（可用 ?lon= 覆盖）
 
+/* --------------------------------------------------- 观测站：地球 / 月面 */
+/*
+ * 整套天空是"赤道坐标 → 地平坐标"的一次矩阵旋转（skyMatrix），所以换观测站
+ * 只要换两组数：纬度 LAT、恒星时。月面站取静海一带（南纬 32°），潮汐锁定
+ * 意味着地球几乎钉在北方天空 —— 把月面恒星时取成地球的赤经，时角就是 0，
+ * 地球于是落在子午圈上，高度 = 90° − |月面纬度 − 地球赤纬| ≈ 30°~86°。
+ */
+const MOON_LAT = -32.0 * DEG;
+const MOON_LON = 0.0;
+const SITE = {
+  kind: 'earth',          // 'earth' | 'moon' | 'toMoon' | 'toEarth'
+  earthLat: 34.4 * DEG,   // 由下方 URL 覆盖后再回填
+  earthLon: 113.0,
+  lstOverride: null,      // 过渡动画期间写死恒星时（弧度）
+};
+
 (() => {   // ?lat=&lon= 覆盖观测点
   const q = new URLSearchParams(location.search);
   const la = parseFloat(q.get('lat')), lo = parseFloat(q.get('lon'));
   if (isFinite(la) && Math.abs(la) < 90) LAT = la * DEG;
   if (isFinite(lo) && Math.abs(lo) <= 180) LONGITUDE = lo;
+  SITE.earthLat = LAT; SITE.earthLon = LONGITUDE;
+  if (q.get('site') === 'moon') SITE.kind = 'moon';   // ?site=moon 直接落在月球
 })();
+
+/* 从月球看地球的方向（赤道系单位矢量）= 月亮地心位置的反向 */
+function earthEqDir() {
+  const m = currentEphem[1].eq;
+  return new THREE.Vector3(-m.x, -m.y, -m.z).normalize();
+}
+function atMoon() { return SITE.kind === 'moon'; }
 
 function gmstDeg(ms) {
   const T = centuries(ms);
   return 280.46061837 + 360.98564736629 * ((ms / 86400000 + 2440587.5) - 2451545.0) + 0.000387933 * T * T;
 }
 function lstRad(ms) {
+  if (SITE.lstOverride != null) return SITE.lstOverride;
+  if (SITE.kind === 'moon') {
+    // 月面：把地球钉在子午圈（正北）。RA(地球) = RA(月亮) + 180°
+    const m = currentEphem[1].eq;
+    return Math.atan2(-m.y, -m.x);
+  }
   const deg = ((gmstDeg(ms) + LONGITUDE) % 360 + 360) % 360;
   return deg * DEG;
 }
@@ -2606,6 +3067,21 @@ BODIES.forEach((b, i) => {
   rowEls.push(el);
 });
 
+/* ---- 月球模式多出来的第 10 行：地球（月亮那行藏起来） ---- */
+const earthRowEl = document.createElement('div');
+earthRowEl.className = 'row';
+earthRowEl.style.display = 'none';
+earthRowEl.innerHTML = `<span class="dot" style="background:#7fb2ff;color:#7fb2ff"></span>
+  <span class="nm">地球<small>EARTH</small></span>
+  <span class="alt">—</span><span class="mg">—</span>`;
+earthRowEl.addEventListener('click', () => selectEarth(true));
+rows.appendChild(earthRowEl);
+function syncMoonRows() {
+  const moonRow = rowEls[1];
+  if (earthRowEl) earthRowEl.style.display = atMoon() ? '' : 'none';
+  if (moonRow) moonRow.style.display = atMoon() ? 'none' : '';
+}
+
 /* ---- 星座清单（第二个 Tab） ---- */
 const rowsConst = document.getElementById('rowsConst');
 const rowsStars = document.getElementById('rowsStars');
@@ -2716,6 +3192,12 @@ const labelEls = BODIES.map(b => {
   document.getElementById('labels').appendChild(el);
   return el;
 });
+
+/* 月面上的地球：它在九颗 Points 之外，单独给它一个名标 */
+const earthLabelEl = document.createElement('div');
+earthLabelEl.className = 'lab';
+earthLabelEl.innerHTML = '<i style="background:#7fb2ff"></i>地球';
+document.getElementById('labels').appendChild(earthLabelEl);
 
 /* 尺度阶梯那 8 个天体的名标（跟着点位走，标一下距离） */
 const flabelEls = FAMOUS.map(f => {
@@ -2877,6 +3359,16 @@ function onUp(e) {
     if (d < bestD) { bestD = d; best = i; bestX = sx; bestY = sy; }
   });
   if (best >= 0) { starFlash(bestX, bestY); selectBody(best, false); return; }
+  // 月球模式：天上那枚地球盘也能直接点（它是 mesh，不在九颗 Points 里）
+  if (atMoon() && earthDisc.visible) {
+    const p = earthDisc.position.clone().project(camera);
+    if (p.z < 1) {
+      const sx = (p.x * 0.5 + 0.5) * window.innerWidth;
+      const sy = (-p.y * 0.5 + 0.5) * window.innerHeight;
+      const rpx = Math.max(26, (EARTH_DISC_R / (SKY_R - 80)) * (window.innerHeight / (2 * Math.tan(state.fov * DEG * 0.5))) + 6);
+      if (Math.hypot(sx - e.clientX, sy - e.clientY) < rpx) { starFlash(sx, sy); selectEarth(false); return; }
+    }
+  }
   if (e.target && e.target.closest && e.target.closest('#card, #sunHud, #tourbar, #tourEnd')) return;
   // 尺度阶梯上的 8 个著名天体：给更大的命中半径（深空天体本身只是一个点）
   if (true) {
@@ -3062,7 +3554,42 @@ function showCard(i) {
   const goEl = document.getElementById('cardGo');
   goEl.dataset.key = b.key;
   goEl.classList.toggle('off', !(b.key && PLANET_VIEWS[b.key]));
+  // 站在地球上选中月亮：卡片底部多一个「登陆月球」
+  const moonEl = document.getElementById('cardMoon');
+  if (moonEl) moonEl.classList.toggle('off', !(b.key === 'moon' && SITE.kind === 'earth'));
+  syncCardHome();
   cardEl.classList.add('on');
+}
+
+/* 地球卡片（只有站在月球上才用得到）：九颗之外的第 10 个天体 */
+function showEarthCard() {
+  selectedIdx = -2;
+  selectedConst = -1; setConstBoost(-1);
+  clabEl.style.opacity = '0';
+  document.getElementById('cardNote').classList.add('hide');
+  const dot = document.getElementById('cardDot');
+  dot.style.background = '#7fb2ff'; dot.style.color = '#7fb2ff';
+  document.getElementById('cardName').textContent = '地球';
+  document.getElementById('cardEn').textContent = 'EARTH';
+  document.getElementById('cardDia').textContent = '直径 12,742 km · 月球的 3.67 倍';
+  document.getElementById('cardDist').textContent = '距月 38.4 万 km · 光走 1.28 秒';
+  document.getElementById('cardDesc').textContent =
+    '此刻它像一枚蓝白色的圆盘挂在北方天空，视直径约 1.9°——比在地球上看到的满月大近四倍，也亮四十多倍。';
+  const goEl = document.getElementById('cardGo');
+  goEl.dataset.key = 'earth';
+  goEl.classList.remove('off');
+  const cm = document.getElementById('cardMoon'); if (cm) cm.classList.add('off');
+  syncCardHome();
+  cardEl.classList.add('on');
+}
+function selectEarth(move) {
+  if (!atMoon()) return;
+  ding(1046);
+  if (move) {
+    const dir = earthEqDir().applyMatrix3(U.uSky.value).normalize();
+    state.focus = { yaw: Math.atan2(-dir.x, -dir.z), pitch: Math.asin(Math.max(-1, Math.min(1, dir.y))) };
+  }
+  showEarthCard();
 }
 
 /* 尺度阶梯那 8 个天体：卡片里给「类型 / 距离 / 光走多久」三行硬信息 */
@@ -3137,8 +3664,10 @@ function showFamousCard(i, sx, sy) {
   document.getElementById('cardDesc').textContent = f.desc;
   document.getElementById('cardNote').textContent = f.note;
   const goEl = document.getElementById('cardGo');
-  goEl.classList.add('off');        // 深空天体暂无独立特写场景
+  goEl.classList.add('off');
+  { const cm = document.getElementById('cardMoon'); if (cm) cm.classList.add('off'); }        // 深空天体暂无独立特写场景
   goEl.dataset.key = '';
+  syncCardHome();
   cardEl.classList.add('on');
   if (sx != null) placeCard(sx, sy);
 }
@@ -3181,6 +3710,62 @@ function cardGoTap(ev) {
 cardGoEl.addEventListener('pointerup', cardGoTap);
 cardGoEl.addEventListener('click', cardGoTap);
 
+/* 登陆月球 / 返回地球 */
+const cardHomeEl = document.getElementById('cardHome');
+const cardMoonEl = document.getElementById('cardMoon');
+function syncCardHome() {
+  if (cardHomeEl) cardHomeEl.classList.toggle('off', !atMoon());
+}
+
+let moonTapLast = 0;
+function cardMoonTap(ev) {
+  ev.stopPropagation();
+  if (ev.cancelable) ev.preventDefault();
+  const now = performance.now();
+  if (now - moonTapLast < 800) return;
+  moonTapLast = now;
+  hideCard();
+  goSite('moon');
+}
+cardMoonEl.addEventListener('pointerup', cardMoonTap);
+cardMoonEl.addEventListener('click', cardMoonTap);
+
+let cardHomeLast = 0;
+function cardHomeTap(ev) {
+  ev.stopPropagation();
+  if (ev.cancelable) ev.preventDefault();
+  if (!atMoon()) return;
+  const now = performance.now();
+  if (now - cardHomeLast < 600) return;
+  cardHomeLast = now;
+  hideCard();
+  goSite('earth');
+}
+if (cardHomeEl) {
+  cardHomeEl.addEventListener('pointerup', cardHomeTap);
+  cardHomeEl.addEventListener('click', cardHomeTap);
+}
+const btnHomeEl = document.getElementById('btnHome');
+if (btnHomeEl) btnHomeEl.addEventListener('click', () => goSite('earth'));
+if (atMoon()) {                                   // ?site=moon 直落月球
+  LAT = MOON_LAT;
+  U.uMoon.value = 1;
+  U.uReveal.value = 1;                            // 直落没有电影序列，地面透明度要显式拉满
+  U.uLines.value = 1;
+  earthDisc.visible = true;
+  earthMat.uniforms.uOpacity.value = 1;
+  moonGear.visible = true;
+  dunes.visible = true;
+  gravel.visible = true;
+  nearGround.visible = true;
+  grassBlades.visible = false;
+  ridgeMesh.visible = false;
+  state.focus = { yaw: 0, pitch: 0.10 };   // 压低视线：月面要占到画面下半，不能只留一条地面
+  if (btnHomeEl) btnHomeEl.style.display = '';
+  paintSite();
+  syncMoonRows();
+}
+
 function constellationOf(starIdx) {
   for (let i = 0; i < cRange.length; i++) {
     const r = cRange[i];
@@ -3211,8 +3796,10 @@ function showConstCard(i) {
   note.textContent = c.note || CONST_NOTE;
   note.classList.remove('hide');
   const goEl = document.getElementById('cardGo');
-  goEl.classList.add('off');          // 星座卡也没有特写场景
+  goEl.classList.add('off');
+  { const cm = document.getElementById('cardMoon'); if (cm) cm.classList.add('off'); }          // 星座卡也没有特写场景
   goEl.dataset.key = '';
+  syncCardHome();
   cardEl.classList.add('on');
   clabEl.innerHTML = `${c.cn}<small>${c.en.toUpperCase()}</small>`;
 }
@@ -3252,8 +3839,10 @@ function showStarCard(k) {
   note.textContent = '天文提示：星等是"从地球看上去有多亮"，数值越小越亮，与恒星的真实光度不是一回事；距离则意味着我们看到的是它若干年前发出的光。';
   note.classList.remove('hide');
   const goEl = document.getElementById('cardGo');
-  goEl.classList.add('off');          // 恒星/星座没有特写场景
+  goEl.classList.add('off');
+  { const cm = document.getElementById('cardMoon'); if (cm) cm.classList.add('off'); }          // 恒星/星座没有特写场景
   goEl.dataset.key = '';
+  syncCardHome();
   cardEl.classList.add('on');
   clabEl.innerHTML = `${info.cn || g.cn}<small>${(info.bayer || g.en).toUpperCase()}</small>`;
 }
@@ -3547,6 +4136,13 @@ function tourRender() {
 function tourStart(plan) {
   if (!state.ready) return;
   const key = plan === 'light' ? 'light' : 'sys';
+  // 演示讲的是"从地球看出去"，所以站在月球上就先回地球，过渡完再开演
+  if (atMoon()) {
+    goSite('earth');
+    toast('演示从地球出发：正在返回地球观测点…');
+    setTimeout(() => tourStart(plan), 2300);
+    return;
+  }
   if (tourPrepMissing(key).length) {           // 旁白还没就位：先加载，加载完再起演
     if (LG.pending) return;                    // 已经在加载了，别叠第二遍
     preloadTour(key, () => tourStartRaw(key));
@@ -3661,15 +4257,25 @@ document.getElementById('btnConst').addEventListener('click', () => {
   state.showConst = !state.showConst;
   applyConstVisual();
 });
-function setSite(latDeg, lonDeg) {
-  LAT = latDeg * DEG; LONGITUDE = lonDeg;
+function paintSite() {
   const el = document.getElementById('site');
-  if (el) el.textContent = `${Math.abs(latDeg).toFixed(2)}°${latDeg >= 0 ? 'N' : 'S'} ${Math.abs(lonDeg).toFixed(2)}°${lonDeg >= 0 ? 'E' : 'W'}`;
+  if (el) el.textContent = atMoon()
+    ? `月面 · 静海 ${Math.abs(MOON_LAT / DEG).toFixed(1)}°S ${MOON_LON.toFixed(1)}°E`
+    : `${Math.abs(LAT / DEG).toFixed(2)}°${LAT >= 0 ? 'N' : 'S'} ${Math.abs(LONGITUDE).toFixed(2)}°${LONGITUDE >= 0 ? 'E' : 'W'}`;
+  const sub = document.querySelector('.sub');
+  if (sub && sub.firstChild) {
+    sub.firstChild.nodeValue = atMoon() ? '太阳系行星 · 月面视角 · ' : '太阳系行星 · 地球视角 · ';
+  }
+}
+function setSite(latDeg, lonDeg) {
+  SITE.earthLat = latDeg * DEG; SITE.earthLon = lonDeg;
+  if (atMoon()) { toast('地球观测点已更新，返回地球后生效'); return; }
+  LAT = latDeg * DEG; LONGITUDE = lonDeg;
+  paintSite();
   refreshEphem(true);               // 观测点变了，天体的高度/方位要立刻重算
   updateBodies(skyMatrix(lstRad(state.timeMs)));
 }
-const siteEl = document.getElementById('site');
-if (siteEl) siteEl.textContent = `${(LAT / DEG).toFixed(2)}°N ${LONGITUDE.toFixed(2)}°E`;
+paintSite();
 
 document.getElementById('btnGeo').addEventListener('click', () => {
   const btn = document.getElementById('btnGeo');
@@ -3891,6 +4497,102 @@ function bgmSet(on, remember = true) {
 bgmBtn.classList.toggle('on', bgmWanted);
 bgmBtn.addEventListener('click', () => bgmSet(!bgmWanted));
 
+/* --------------------------------------------------- 观测站切换：登陆月球 */
+/*
+ * 星空"过山车"：恒星时与纬度一起做 1.9 秒缓动 —— 中间天空是真的顺着旋转量
+ * 一路滑过去（额外叠一个 sin 拱，会多甩出约 50°），最后一段交给后期 warp 收成星流。
+ * 地面材质（uMoon）、登月舱、地球盘在同一段里交叉淡入，不是"淡出换皮"。
+ */
+const SITE_ANIM = { on: false, t0: 0, dur: 1250, toMoon: false, fromLat: 0, toLat: 0, fromLst: 0, dLst: 0 };
+function lstEarth(ms) {
+  const deg = ((gmstDeg(ms) + SITE.earthLon) % 360 + 360) % 360;
+  return deg * DEG;
+}
+function lstMoon(ms) {
+  const m = currentEphem[1].eq;
+  return Math.atan2(-m.y, -m.x);
+}
+function shortestD(a, b) {          // 两段恒星时之间的最短弧
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+function goSite(kind) {
+  if (SITE_ANIM.on || kind === SITE.kind) return;
+  if (CINE.active) return;
+  hideCard();                      // 穿梭一开始就把卡片收掉，别让它飘在半空
+  const toMoon = kind === 'moon';
+  SITE_ANIM.on = true;
+  SITE_ANIM.t0 = performance.now();
+  SITE_ANIM.toMoon = toMoon;
+  SITE_ANIM.fromLat = LAT;
+  SITE_ANIM.toLat = toMoon ? MOON_LAT : SITE.earthLat;
+  SITE_ANIM.fromLst = lstRad(state.timeMs);
+  const targetLst = toMoon ? lstMoon(state.timeMs) : lstEarth(state.timeMs);
+  SITE_ANIM.dLst = shortestD(SITE_ANIM.fromLst, targetLst);
+  state.velocity = 0;
+  state.focus = null;
+  hideCard();
+  toast(toMoon ? '星际转移：正在降落到月球静海…' : '返回地球：正在爬升回草原…');
+}
+function tickSite(now) {
+  if (!SITE_ANIM.on) return;
+  const k = Math.min(1, (now - SITE_ANIM.t0) / SITE_ANIM.dur);
+  const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;      // easeInOutQuad
+  const dir = SITE_ANIM.toMoon ? 1 : -1;
+  LAT = SITE_ANIM.fromLat + (SITE_ANIM.toLat - SITE_ANIM.fromLat) * e;
+  SITE.lstOverride = SITE_ANIM.fromLst + SITE_ANIM.dLst * e + Math.sin(k * Math.PI) * 1.35 * dir;
+  // 大气 → 真空、草原 → 月壤：0.38 之后开始过渡
+  U.uMoon.value = SITE_ANIM.toMoon
+    ? THREE.MathUtils.clamp((k - 0.36) / 0.40, 0, 1)
+    : 1 - THREE.MathUtils.clamp((k - 0.36) / 0.40, 0, 1);
+  const gk = SITE_ANIM.toMoon
+    ? THREE.MathUtils.clamp((k - 0.52) / 0.36, 0, 1)
+    : 1 - THREE.MathUtils.clamp((k - 0.52) / 0.36, 0, 1);
+  const onMoonSide = U.uMoon.value > 0.5;
+  earthMat.uniforms.uOpacity.value = Math.max(0, gk);
+  earthDisc.visible = gk > 0.01;
+  moonGear.visible = onMoonSide;
+  dunes.visible = onMoonSide;
+  gravel.visible = onMoonSide;
+  nearGround.visible = onMoonSide;
+  grassBlades.visible = !onMoonSide;
+  ridgeMesh.visible = !onMoonSide;
+  // 相机：收视场 → 落地后再放开，做出"隧穿"感
+  const fovK = Math.sin(k * Math.PI);
+  state.fov = state.fovTarget = 58 - 27 * fovK;            // 收得更狠：隧穿感
+  WARP.value = Math.pow(Math.sin(k * Math.PI), 0.6) * 1.45;   // 全程都在甩星光
+  // 穿过"层"的一瞬闪白
+  const flash = Math.max(0, 1 - Math.abs(k - 0.5) / 0.10);
+  sunFlashEl.style.opacity = String(flash * 0.55);
+  if (k >= 1) {
+    SITE.kind = SITE_ANIM.toMoon ? 'moon' : 'earth';
+    LAT = SITE_ANIM.toLat;
+    SITE.lstOverride = null;
+    U.uMoon.value = atMoon() ? 1 : 0;
+    earthDisc.visible = atMoon();
+    moonGear.visible = atMoon();
+    dunes.visible = atMoon();
+    gravel.visible = atMoon();
+    nearGround.visible = atMoon();
+    grassBlades.visible = !atMoon();
+    ridgeMesh.visible = !atMoon();
+    WARP.value = 0;
+    sunFlashEl.style.opacity = '0';
+    state.fov = state.fovTarget = 58;
+    SITE_ANIM.on = false;
+    state.focus = { yaw: 0, pitch: atMoon() ? 0.30 : VIEW_HOME.pitch };
+    const btn = document.getElementById('btnHome');
+    if (btn) btn.style.display = atMoon() ? '' : 'none';
+    paintSite();
+    syncMoonRows();
+    toast(atMoon()
+      ? '已登陆月球 · 静海基地：地球在正北，脚下是月壤'
+      : '已回到地球：草原观测点');
+  }
+}
+
 /* --------------------------------------------------------- 视角还原 */
 /* "最初的位置" = 入场落地那一刻的取景：正北、略微抬头，地平线和草原留在画面下方 */
 const VIEW_HOME = { yaw: 0, pitch: 0.28 };
@@ -4006,6 +4708,7 @@ function tick() {
   }
   refreshEphem(false);
 
+  tickSite(now);                       // 登陆月球 / 返回地球的星空过渡
   const lst = lstRad(state.timeMs);
   U.uLst.value = lst;
   U.uTime.value += dt;
@@ -4051,6 +4754,30 @@ function tick() {
 
   updateBodies(sky);
   updateEcliptic();
+
+  /* ---- 月面：地球盘定位 + 受光方向（地面与地球都用它） ---- */
+  U.uSunW.value.copy(bodyWorld[0]).normalize();
+  U.uSunAlt.value = bodyWorld[0].y / SKY_R;
+  if (atMoon() && earthDisc.visible) {
+    const ed = earthEqDir().applyMatrix3(sky).normalize();
+    earthDisc.position.copy(ed).multiplyScalar(SKY_R - 80);
+    earthMat.uniforms.uSun.value.copy(U.uSunW.value);
+    moonLight.position.copy(U.uSunW.value).multiplyScalar(320);
+    // 太阳落到月平线下就没有主光了，剩下全靠地照
+    moonLight.intensity = 2.6 * Math.max(0.0, U.uSunAlt.value);
+    earthFill.position.copy(earthDisc.position).normalize().multiplyScalar(320);
+  }
+  if (atMoon() && earthRowEl) {
+    // 清单里那一行的高度 / 星等（地球在月面天空是 -12.7 等的"满地球"量级）
+    const altDeg = Math.asin(Math.max(-1, Math.min(1, earthDisc.position.y / SKY_R))) / DEG;
+    const altEl = earthRowEl.querySelector('.alt'), mgEl = earthRowEl.querySelector('.mg');
+    if (altEl) altEl.textContent = (altDeg >= 0 ? '+' : '') + altDeg.toFixed(0) + '°';
+    if (mgEl) mgEl.textContent = '−4.1';
+  }
+  if (selectedIdx === -2 && atMoon()) {
+    const p = earthDisc.position.clone().project(camera);
+    if (p.z < 1) placeCard((p.x * 0.5 + 0.5) * window.innerWidth, (-p.y * 0.5 + 0.5) * window.innerHeight);
+  }
   if (state.showConst) updateConst(sky); else updateFamous(sky);
   fMat.uniforms.uTime.value = now / 1000;   // 准星呼吸
 
@@ -4433,6 +5160,20 @@ setInterval(() => {
     el.style.transform = `translate(${sx}px, ${sy}px) translate(-50%,${yOff}%)`;
     el.style.opacity = '0.8';
   });
+
+  // 地球的名标：只在月面、且「标签」开着的时候出现
+  if (earthLabelEl) {
+    const p = earthDisc.position.clone().project(camera);
+    const ok = atMoon() && earthDisc.visible && state.showLabels &&
+               p.z < 1 && p.x > -1.05 && p.x < 1.05 && Math.abs(p.y) < 1.05;
+    if (!ok) earthLabelEl.style.opacity = '0';
+    else {
+      const sx = (p.x * 0.5 + 0.5) * window.innerWidth;
+      const sy = (-p.y * 0.5 + 0.5) * window.innerHeight;
+      earthLabelEl.style.transform = `translate(${sx}px, ${sy}px) translate(-50%,-235%)`;
+      earthLabelEl.style.opacity = '0.85';
+    }
+  }
 
   // 尺度阶梯：名标跟着点位，和「标签」开关同步
   for (let i = 0; i < FAMOUS.length; i++) {
