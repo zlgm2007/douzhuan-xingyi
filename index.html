@@ -229,6 +229,35 @@
     cursor:pointer;transition:.25s;margin-top:1px}
   #loadGate .lgCancel:hover{color:var(--paper);border-color:rgba(235,231,223,.38)}
 
+  /* 定中一颗星的爆闪：中心核 + 十字星芒 + 两层扩散环 + 几粒飞散星尘 */
+  #sparkles{position:fixed;inset:0;z-index:25;pointer-events:none;overflow:hidden}
+  #sparkles .flash{position:absolute;width:0;height:0}
+  #sparkles .flash .core{position:absolute;left:-9px;top:-9px;width:18px;height:18px;border-radius:50%;
+    background:radial-gradient(circle,#fff 0%,rgba(255,255,255,.92) 26%,rgba(178,220,255,.45) 52%,rgba(178,220,255,0) 74%);
+    animation:spCore .62s cubic-bezier(.1,.8,.2,1) forwards}
+  @keyframes spCore{0%{transform:scale(.1);opacity:0}18%{opacity:1}38%{transform:scale(1.55)}
+    100%{transform:scale(2.5);opacity:0}}
+  #sparkles .flash .ray{--a:0deg;position:absolute;left:50%;top:50%;width:214px;height:2.6px;margin:-1.3px 0 0 -107px;
+    background:linear-gradient(90deg,rgba(255,255,255,0),rgba(226,240,255,.9) 42%,#fff 50%,
+      rgba(226,240,255,.9) 58%,rgba(255,255,255,0));
+    transform-origin:50% 50%;animation:spRay .72s cubic-bezier(.1,.85,.2,1) forwards;filter:blur(.3px)}
+  #sparkles .flash .ray.short{width:124px;margin-left:-62px;opacity:.86}
+  @keyframes spRay{0%{opacity:0;transform:rotate(var(--a)) scaleX(.04)}
+    15%{opacity:1}100%{opacity:0;transform:rotate(var(--a)) scaleX(1.42)}}
+  #sparkles .flash .ring{position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;
+    border-radius:50%;border:1.5px solid rgba(200,232,255,.95);
+    box-shadow:0 0 8px rgba(150,205,255,.55),inset 0 0 6px rgba(150,205,255,.35);
+    animation:spRing .7s cubic-bezier(.16,.72,.24,1) forwards}
+  #sparkles .flash .ring.late{animation-delay:.15s;border-color:rgba(170,215,255,.66);border-width:1px}
+  @keyframes spRing{0%{transform:scale(.3);opacity:.95}100%{transform:scale(5.4);opacity:0}}
+  #sparkles .flash .dust{position:absolute;left:0;top:0}
+  #sparkles .flash .dust i{position:absolute;left:0;top:0;width:2.4px;height:2.4px;margin:-1.2px 0 0 -1.2px;
+    border-radius:50%;background:#eaf6ff;box-shadow:0 0 5px rgba(190,225,255,.85);
+    animation:spDust .74s cubic-bezier(.15,.7,.25,1) forwards}
+  @keyframes spDust{0%{opacity:0;transform:translate(0,0) scale(.4)}
+    20%{opacity:.9}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.85)}}
+  @media (prefers-reduced-motion:reduce){#sparkles .flash{display:none}}
+
   /* 太阳特写：另一台相机、另一个场景；HUD 让位给这颗星 */
   #sunFlash{position:fixed;inset:0;z-index:27;pointer-events:none;opacity:0;
     background:radial-gradient(circle at 50% 50%,#fff 0%,#ffd9a8 46%,#ff9436 100%)}
@@ -488,6 +517,8 @@
   <div class="tip">拖拽转天 · 滚轮推时 · Ctrl+滚轮缩放 · 点清单可对准某颗</div>
   <div class="err" id="bootErr"></div>
 </div>
+
+<div id="sparkles"></div>
 
 <div id="loadGate">
   <div class="ring" id="lgRing"><span class="tip"></span><div class="hole"><span class="pct" id="lgPct">0%</span></div></div>
@@ -2713,6 +2744,54 @@ function refreshEphem(force) {
 }
 refreshEphem(true);
 
+/* 定中一颗星的那一下：在命中处放一次星光爆闪。
+   DOM 实现（几层 <b> + 一次 CSS 动画），不进渲染管线，也不留任何状态。 */
+const sparkleLayer = document.getElementById('sparkles');
+function starFlash(x, y) {
+  if (!sparkleLayer || !isFinite(x) || !isFinite(y)) return;
+  const el = document.createElement('div');
+  el.className = 'flash';
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+  let dust = '';
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI * 2 * i) / 6 + Math.random() * 0.55;
+    const r = 13 + Math.random() * 15;
+    dust += `<i style="--dx:${(Math.cos(a) * r).toFixed(1)}px;--dy:${(Math.sin(a) * r).toFixed(1)}px"></i>`;
+  }
+  el.innerHTML = '<b class="core"></b>'
+    + '<b class="ray"></b><b class="ray" style="--a:90deg"></b>'
+    + '<b class="ray short" style="--a:45deg"></b><b class="ray short" style="--a:-45deg"></b>'
+    + '<b class="ring"></b><b class="ring late"></b>'
+    + `<span class="dust">${dust}</span>`;
+  sparkleLayer.appendChild(el);
+  setTimeout(() => el.remove(), 800);
+}
+
+/* 演示里的"定中"：镜头还在转的时候先排队，等转到目标那一帧再闪，
+   坐标用天体当时的投影位置，不是鼠标坐标。 */
+let pendingFlash = null;        // { kind: 'body' | 'famous', i }
+function queueFlash(kind, i) { pendingFlash = { kind, i }; }
+
+function screenOfWorld(v) {
+  const p = v.clone().project(camera);
+  if (p.z >= 1) return null;
+  const x = (p.x * 0.5 + 0.5) * window.innerWidth;
+  const y = (-p.y * 0.5 + 0.5) * window.innerHeight;
+  if (x < 24 || x > window.innerWidth - 24 || y < 24 || y > window.innerHeight - 24) return null;
+  return [x, y];
+}
+
+function flushPendingFlash() {
+  const q = pendingFlash;
+  if (!q) return;
+  pendingFlash = null;
+  const v = q.kind === 'body' ? bodyWorld[q.i] : fWorld[q.i];
+  if (!v || v.lengthSq() < 1e-6) return;
+  const s = screenOfWorld(v);
+  if (s) starFlash(s[0], s[1]);
+}
+
 /* ----------------------------------------------------------- 拖拽 / 滚轮 */
 const appEl = renderer.domElement;
 // 触摸设备（手机/平板）：用来决定要不要给"松手滑行"，鼠标端保持 1:1 直接停
@@ -2783,7 +2862,10 @@ function onUp(e) {
   if (!e) return;
   if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return;
   if (performance.now() - downT > 400) return;
-  let best = -1, bestD = 30;                       // 命中半径 30px
+  // 只有点在天幕（#app 的 canvas 层）上才算"定中一颗星"；点控件、卡片、菜单都不算
+  const onSky = e.target === appEl || (e.target && e.target.id === 'app');
+  if (!onSky) return;
+  let best = -1, bestD = 30, bestX = 0, bestY = 0;   // 命中半径 30px
   currentEphem.forEach((b, i) => {
     const w = bodyWorld[i];
     if (w.y / SKY_R < 0.0) return;                 // 地平线以下的点不到
@@ -2792,13 +2874,13 @@ function onUp(e) {
     const sx = (p.x * 0.5 + 0.5) * window.innerWidth;
     const sy = (-p.y * 0.5 + 0.5) * window.innerHeight;
     const d = Math.hypot(sx - e.clientX, sy - e.clientY);
-    if (d < bestD) { bestD = d; best = i; }
+    if (d < bestD) { bestD = d; best = i; bestX = sx; bestY = sy; }
   });
-  if (best >= 0) { selectBody(best, false); return; }
+  if (best >= 0) { starFlash(bestX, bestY); selectBody(best, false); return; }
   if (e.target && e.target.closest && e.target.closest('#card, #sunHud, #tourbar, #tourEnd')) return;
   // 尺度阶梯上的 8 个著名天体：给更大的命中半径（深空天体本身只是一个点）
   if (true) {
-    let bf = -1, bfd = 26;
+    let bf = -1, bfd = 26, bfx = 0, bfy = 0;
     for (let i = 0; i < FAMOUS.length; i++) {
       const w = fWorld[i];
       if (!w || w.y / SKY_R < 0.0) continue;
@@ -2807,13 +2889,13 @@ function onUp(e) {
       const fx = (p.x * 0.5 + 0.5) * window.innerWidth;
       const fy = (-p.y * 0.5 + 0.5) * window.innerHeight;
       const fd = Math.hypot(fx - e.clientX, fy - e.clientY);
-      if (fd < bfd) { bfd = fd; bf = i; }
+      if (fd < bfd) { bfd = fd; bf = i; bfx = fx; bfy = fy; }
     }
-    if (bf >= 0) { ding(1120); showFamousCard(bf, e.clientX, e.clientY); return; }
+    if (bf >= 0) { starFlash(bfx, bfy); ding(1120); showFamousCard(bf, e.clientX, e.clientY); return; }
   }
   // 行星没命中，再找星座亮星（半径 16px，取最近）
   if (state.showConst) {
-    let bc = -1, bd = 16;     // bc 现在存的是星点索引
+    let bc = -1, bd = 16, bcx = 0, bcy = 0;   // bc 现在存的是星点索引
     for (let k = 0; k < cStars.length; k++) {
       const w = cWorld[k];
       if (w.y / SKY_R < 0.0) continue;
@@ -2822,9 +2904,9 @@ function onUp(e) {
       const sx = (p.x * 0.5 + 0.5) * window.innerWidth;
       const sy = (-p.y * 0.5 + 0.5) * window.innerHeight;
       const d = Math.hypot(sx - e.clientX, sy - e.clientY);
-      if (d < bd) { bd = d; bc = k; }
+      if (d < bd) { bd = d; bc = k; bcx = sx; bcy = sy; }
     }
-    if (bc >= 0) { selectStar(bc, false); return; }   // 点到具体一颗星 → 弹它自己的卡片
+    if (bc >= 0) { starFlash(bcx, bcy); selectStar(bc, false); return; }   // 点到具体一颗星 → 弹它自己的卡片
   }
   hideCard();
 }
@@ -3288,7 +3370,7 @@ const SYSTOUR = [
       setTab('body');
       tourPlanet = bestPlanet(true);
       if (tourPlanet < 0) tourPlanet = bestPlanet(false);
-      if (tourPlanet >= 0) selectBody(tourPlanet, true); else hideCard();
+      if (tourPlanet >= 0) { selectBody(tourPlanet, true); queueFlash('body', tourPlanet); } else hideCard();
     } },
 
   { title: '④ 岁差与蛇夫座',
@@ -3309,6 +3391,7 @@ const LIGHTTOUR = FAMOUS.map((f, i) => ({
     showFamousCard(i);
     // 转到这颗星上：在地平线下就把钟拨到它升起的时候，然后再对准
     const r = focusFamous(i, { fly: true });
+    if (r.ok) queueFlash('famous', i);
     if (!r.ok) toast(`${f.cn} 在南天 · 南京纬度看不到，卡片里是它真实的距离`);
     else if (r.raised && window.innerWidth > 860) {
       const d = new Date(state.timeMs);
@@ -3945,6 +4028,7 @@ function tick() {
       state.pitch += (state.focus.pitch - state.pitch) * Math.min(1, dt * 4.2);
       if (Math.abs(state.focus.yaw - state.yaw) < 0.002 && Math.abs(state.focus.pitch - state.pitch) < 0.002) state.focus = null;
     }
+    if (!state.focus) flushPendingFlash();
     camera.rotation.y = state.yaw;
     camera.rotation.x = state.pitch;
   }
