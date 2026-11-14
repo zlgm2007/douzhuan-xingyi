@@ -297,9 +297,13 @@
   #sunHud{position:fixed;inset:0;z-index:18;pointer-events:none;opacity:0;
     transition:opacity .7s var(--ease)}
   body.suncam #sunHud{opacity:1}
+  /* 太阳特写之外，#sunHud 整层是 opacity:0 的：里面的「讲解」「返回星野」绝不能
+     自己开 pointer-events:auto，否则会变成右下角/左上角看不见却点得到的热区
+     —— 之前点右下角空白就开始放太阳讲解，就是这只隐形按钮干的 */
+  body.suncam #sunHud .back,body.suncam #sunHud .say{pointer-events:auto}
   body.sunwarp #hud,body.sunwarp #card,body.sunwarp #tourbar,body.sunwarp #toast,body.sunwarp #labels,
   body.suncam #hud,body.suncam #card,body.suncam #tourbar,body.suncam #toast,body.suncam #labels{opacity:0!important;pointer-events:none!important}
-  #sunHud .back{position:absolute;left:clamp(16px,3vw,42px);top:clamp(16px,3vh,34px);pointer-events:auto;
+  #sunHud .back{position:absolute;left:clamp(16px,3vw,42px);top:clamp(16px,3vh,34px);
     display:inline-flex;align-items:center;gap:9px;padding:8px 16px;border:1px solid rgba(235,231,223,.20);
     border-radius:999px;background:rgba(3,5,11,.42);backdrop-filter:blur(6px);cursor:pointer;
     font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.16em;color:var(--dim);transition:.25s}
@@ -316,7 +320,7 @@
   #sunHud .src{margin-top:10px;font-family:"JetBrains Mono",monospace;font-size:8px;letter-spacing:.14em;
     color:rgba(235,231,223,.30)}
   /* 讲解按钮：跟「返回星野」同一个 pill 家族，放右下角让讲解不打断读字 */
-  #sunHud .say{position:absolute;right:clamp(16px,3vw,42px);bottom:clamp(26px,5vh,60px);pointer-events:auto;
+  #sunHud .say{position:absolute;right:clamp(16px,3vw,42px);bottom:clamp(26px,5vh,60px);
     display:inline-flex;align-items:center;gap:9px;padding:9px 18px;border:1px solid rgba(235,231,223,.20);
     border-radius:999px;background:rgba(3,5,11,.42);backdrop-filter:blur(6px);cursor:pointer;
     font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.16em;color:var(--dim);
