@@ -20,11 +20,13 @@
 
 ## 演示视频
 
-[![星野 · 登陆月球：从草原到月面，再回到地球](docs/screenshots/00-视频封面.jpg)](docs/xingye-moon-landing.mp4)
+![星野 · 登陆月球（4× 快放预览）](docs/screenshots/00-演示快放.gif)
 
-> 41 秒一镜到底，一条动线走完五个环节：**登录**（星河闸门）→ 地球草原夜空 → 选中**月亮**、`登陆月球` 星光穿梭 → 月面静海（月壤平原、登月火箭、正北天空那枚地球盘）→ 点地球 `查看细节` 进地球特写并听一段讲解 → `返回星野` → `返回地球` 爬升回草原。夜曲铺底，人声讲解从第 22 秒起（27.7 秒原声截前 10.5 秒）。
+> 上面是 **4 倍速快放**的动图预览，一条动线走完五个环节：**登录**（星河闸门）→ 地球草原夜空 → 选中**月亮**、`登陆月球` 星光穿梭 → 月面静海（月壤平原、登月火箭、正北天空那枚地球盘）→ 点地球 `查看细节` 进地球特写并听一段讲解 → `返回星野` → `返回地球` 爬升回草原。
 >
-> 画面即封面那一刻：月面视角 · 静海 32.0°S 0.0°E，右侧清单里地球的高度是 +27°。文件 `docs/xingye-moon-landing.mp4`，1440×846 / 30fps / 12 MB。
+> 原片 **41.7 秒**，1440×846 / 30fps，夜曲铺底、第 22 秒起是人声讲解（27.7 秒原声截前 10.5 秒）。GitHub 的文件页不提供 mp4 播放器 —— 超限的二进制一律只给 `View raw`，所以带声音的完整版请取 [docs/xingye-moon-landing.mp4](docs/xingye-moon-landing.mp4)（7.8 MB）**本地播放**，或把仓库开成 GitHub Pages 后走 `docs/demo.html`（页内 `<video>` 直接播）。
+>
+> 封面那一刻：月面视角 · 静海 32.0°S 0.0°E，右侧清单里地球的高度是 +27°。
 
 ## 图说
 
@@ -95,8 +97,9 @@ index.html                     单文件主页面（GLSL、星历、HUD 全在�
 three.module.js / three.core.js / jsm/    three.js r187 与本页用到的子模块
 assets/audio/                  九颗天体的「♪ 讲解」女声（<key>.wav，16 kHz 单声道）
 assets/tour/                   演示旁白：系统演示 nar-1…5.mp4、光走了多久 light-1…8.wav
-docs/screenshots/              README 截图（1440×900 @2x）与视频封面
-docs/xingye-moon-landing.mp4   演示视频：登录 → 月球 → 登月 → 地球特写 → 回地球（41 秒）
+docs/screenshots/              README 截图（1440×900 @2x）、视频封面与快放动图
+docs/xingye-moon-landing.mp4   演示视频：登录 → 月球 → 登月 → 地球特写 → 回地球（41.7 秒，7.8 MB）
+docs/demo.html                 视频播放页（开启 GitHub Pages 后可在线播放完整版）
 docs/行星页-需求分析与技术方案.md    需求拆解、坐标链、里程碑
 ```
 
