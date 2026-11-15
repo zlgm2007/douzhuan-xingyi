@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>星野 · 月球登陆演示</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #05070c; }
+  body {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px; padding: 24px 18px 40px; box-sizing: border-box;
+    font: 14px/1.6 -apple-system, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #b8c2d0;
+  }
+  h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: .04em; color: #e8edf5; }
+  h1 span { color: #6ea8ff; }
+  .wrap {
+    width: min(1200px, 100%); border-radius: 14px; overflow: hidden;
+    box-shadow: 0 18px 60px rgba(0, 0, 0, .55), 0 0 0 1px rgba(140, 170, 220, .16);
+    background: #000;
+  }
+  video { display: block; width: 100%; height: auto; background: #000; }
+  .meta { font-size: 13px; color: #7c8798; text-align: center; max-width: 820px; }
+  .meta a { color: #8fb6ff; text-decoration: none; border-bottom: 1px solid rgba(143, 182, 255, .35); }
+  .meta a:hover { color: #cfe0ff; }
+  @media (max-width: 640px) { h1 { font-size: 17px; } }
+</style>
+</head>
+<body>
+  <h1>星野 <span>·</span> 月球登陆演示</h1>
+  <div class="wrap">
+    <video controls preload="metadata" playsinline
+           poster="screenshots/00-视频封面.jpg"
+           src="xingye-moon-landing.mp4"></video>
+  </div>
+  <p class="meta">
+    41.7 秒 · 1440×846 · 30fps · 夜曲铺底，第 22 秒起为人声讲解。<br>
+    动线：登录闸门 → 草原夜空选中月亮 → 登陆月球 → 月面静海 → 地球特写讲解 → 返回星野 → 返回地球。<br>
+    <a href="https://github.com/zlgm2007/douzhuan-xingyi">← 回到仓库</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/zlgm2007/douzhuan-xingyi/blob/hot_work/index.html">看 index.html</a>
+  </p>
+</body>
+</html>
